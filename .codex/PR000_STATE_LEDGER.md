@@ -18,6 +18,8 @@ Last updated: 2026-08-11 (Asia/Shanghai)
 - R1 starting HEAD, re-verified locally and on GitHub: `434838b36bdb369435018e87faedf997489f1b17`.
 - R1 implementation HEAD before final ledger reconciliation: `468941f088f367b00fe0dc68699e50bc1f51e4cb`.
 - R1 ledger-reconciliation HEAD before the bounded Windows Core-timeout correction: `f70188b70e50f6b016776198a1448ddfcdb4c919`.
+- R1 corrected implementation HEAD before terminal ledger reconciliation: `14b95e159451a1fc12e192a64d8fecfdb217782c`.
+- Terminal ledger-reconciliation HEAD: the commit containing this terminal reconciliation; its exact SHA and exact-head CI are verified from Git/GitHub after the commit because neither is knowable from within the commit itself.
 
 ## R1 bounded correction scope
 
@@ -55,9 +57,10 @@ Last updated: 2026-08-11 (Asia/Shanghai)
 - R1 recovery verification: PASS — local HEAD, tracked origin branch, and GitHub branch all equal `434838b36bdb369435018e87faedf997489f1b17`; origin/upstream identities match authority; origin/upstream `main` both equal the frozen base.
 - Mistaken upstream PR: CLOSED without merge — `https://github.com/codedogQBY/ReadAny/pull/648`; correction comment: `https://github.com/codedogQBY/ReadAny/pull/648#issuecomment-5247941617`.
 - Upstream PR CI: BLOCKED (`action_required`) — final observed upstream run for the R1 starting head is `31447755045`; jobs never started because upstream-maintainer approval is required.
-- Fork-internal replacement PR: OPEN — `https://github.com/dongxuelian11/ReadAny/pull/1`; base `main` at `3f8826c37391721289f4d6db47bacc0c73788572`, implementation head `468941f088f367b00fe0dc68699e50bc1f51e4cb` before final ledger reconciliation.
+- Fork-internal replacement PR: OPEN — `https://github.com/dongxuelian11/ReadAny/pull/1`; base `main` at `3f8826c37391721289f4d6db47bacc0c73788572`, corrected implementation head `14b95e159451a1fc12e192a64d8fecfdb217782c` before terminal ledger reconciliation.
 - Fork-internal CI run: COMPLETE — `https://github.com/dongxuelian11/ReadAny/actions/runs/31448993167`; workflow conclusion SUCCESS, blocking quality SUCCESS, blocking Windows NSIS SUCCESS, known-upstream-debt observation FAILURE and explicitly non-gating.
 - Latest-head CI investigation: run `31449780697` produced Windows NSIS SUCCESS and the expected non-gating debt FAILURE, but blocking quality failed twice on the same existing `src/pdf/chapter.test.ts` 5-second timeout (565/566 passed). The prior PR head and local suite passed 566/566, so R1 applies the documented Vitest `--testTimeout=30000` only to the full blocking Core suite; no retry, skip, test-source change, or product-code change is used.
+- Corrected implementation-head CI: COMPLETE — `https://github.com/dongxuelian11/ReadAny/actions/runs/31450433314`; workflow conclusion SUCCESS, blocking quality SUCCESS, blocking Windows NSIS SUCCESS, and known-upstream-debt observation visible FAILURE and explicitly non-gating. Core passed 566/566, Expo passed 3/3, frontend production build passed, and the NSIS job produced `ReadAny_1.3.5_x64-setup.exe`. The debt job's current raw execution reported lint 1,621 errors/284 warnings and CLI 129/135 passing with 6 failures; the frozen baseline remains 124/135 passing with 11 failures.
 
 ## Materially changed files
 
@@ -101,18 +104,20 @@ Last updated: 2026-08-11 (Asia/Shanghai)
 - FAIL (`BASELINE_FAILURE`, non-gating) — fork-internal debt job `93649215623` completed as visible FAILURE after running full lint and full CLI tests and writing the step summary; workflow conclusion remained SUCCESS because that job is explicitly non-gating.
 - FAIL (`CI_TIMEOUT`, bounded correction required) — latest-head blocking quality Core step timed out twice at the default 5 seconds in the same PDF worker-backed test; both runs reported 74/75 files and 565/566 tests passing. The exact full suite passed locally with `--testTimeout=30000`.
 - PASS — changed only the Windows blocking Core command to run the same full repository suite with Vitest's bounded 30-second timeout; the local command passed all 75 files/566 tests.
+- PASS — committed and normally pushed the bounded timeout correction as `14b95e159451a1fc12e192a64d8fecfdb217782c`; no reset, rebase, force push, test retry, skip, or product-code change was used.
+- PASS — corrected implementation-head run `31450433314` completed with both blocking jobs successful; the debt observation remained visibly failed and non-gating, and the workflow conclusion was SUCCESS.
 
-## Pending / next action
+## Terminal reconciliation / next action
 
 - PASS — implemented and locally verified the R1 workflow, integration-registry, and public-ledger corrections.
 - PASS — committed and pushed R1 on the existing branch without rewriting history.
 - PASS — commented on and closed upstream PR #648 without merging it.
 - PASS — created the fork-internal replacement PR and inspected its real blocking and baseline-observation CI to completion.
-- PENDING — commit and push the bounded Windows Core-timeout correction, then require the latest PR head blocking quality and NSIS jobs to pass.
+- PASS — committed and pushed the bounded Windows Core-timeout correction; its exact-head blocking quality and NSIS jobs both passed.
 - PASS — refreshed the Git index stat cache; `packages/app/src-tauri/Cargo.toml` is clean and has no staged or unstaged content change.
 - PASS — reviewed the complete staged diff and confirmed that it contains only the seven intended PR-000 files.
 - PASS — validated both JSON files, parsed the workflow YAML, and passed `git diff --cached --check`.
-- Next bounded action: validate, commit, and push the two-file timeout correction; require latest-head CI evidence, then stop without starting PR-001.
+- Terminal action: commit and normally push this ledger-only reconciliation, then verify from Git/GitHub that local HEAD, tracked branch, PR head, and the terminal commit's two blocking CI jobs agree. The known-debt job must remain visible FAIL and non-gating. Do not make another ledger commit after that external verification, because doing so would recursively create a new exact HEAD and new CI state. Stop without starting PR-001.
 
 ## Test and build truth
 
@@ -137,12 +142,16 @@ Last updated: 2026-08-11 (Asia/Shanghai)
 | R1 fork-internal Windows NSIS CI | PASS | Run `31448993167`, job `93649215676`: dependency/Rust setup and real Tauri NSIS production build completed successfully. |
 | R1 fork-internal baseline-debt CI | FAIL (`BASELINE_FAILURE`, non-gating) | Run `31448993167`, job `93649215623`: full lint and CLI commands ran; the summary recorded frozen debt and the final explicit step kept the job visibly failed. Job-level `continue-on-error` made the overall workflow conclusion SUCCESS without misreporting the debt job as PASS. |
 | R1 latest-head quality timeout investigation | FAIL (`CI_TIMEOUT`) | Run `31449780697` attempt 1 and quality-only attempt 2 both failed only `src/pdf/chapter.test.ts` at Vitest's 5-second default; 74/75 files and 565/566 tests passed. Local full-suite verification with `--testTimeout=30000` passed 75/75 and 566/566. |
+| R1 corrected implementation-head blocking quality CI | PASS | Run `31450433314`, job `93653514404`: install, patch/config validation, Core 75/75 files and 566/566 tests, Expo 2/2 files and 3/3 tests, and frontend TypeScript/Vite production build all passed. |
+| R1 corrected implementation-head Windows NSIS CI | PASS | Run `31450433314`, job `93653514429`: the real Tauri NSIS production build passed and produced `ReadAny_1.3.5_x64-setup.exe`. |
+| R1 corrected implementation-head baseline-debt CI | FAIL (`BASELINE_FAILURE`, non-gating) | Run `31450433314`, job `93653514415`: full lint failed with 1,621 errors/284 warnings; the current full CLI execution passed 129/135 and failed 6/135. The frozen baseline remains 124/135 passing and 11/135 failing. The job remained visibly failed; it was not reported as PASS or removed. |
 
 ## Completion determination
 
 - Original PR-000 fork, commit, push, and upstream PR creation: COMPLETE, but upstream PR target was incorrect and is being corrected by R1.
 - R1 implementation, same-branch push, upstream PR correction, and fork-internal replacement PR: COMPLETE.
-- Latest-head blocking CI after the bounded timeout correction: PENDING; completion is not declared until quality and NSIS are both successful.
+- Corrected implementation-head blocking CI after the bounded timeout correction: COMPLETE; quality and NSIS both succeeded on exact head `14b95e159451a1fc12e192a64d8fecfdb217782c`.
+- Terminal ledger-only reconciliation: COMPLETE only after external post-commit verification confirms local/tracked/PR head equality and both blocking jobs SUCCESS for the terminal ledger commit. This condition is intentionally evaluated from Git/GitHub after the commit to avoid impossible self-reference.
 - Known upstream lint and CLI debt: remains visible FAIL and explicitly non-gating; not classified as PASS and not silently removed.
 - PR-001: NOT_STARTED and out of scope.
 
