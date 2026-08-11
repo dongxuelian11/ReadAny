@@ -11,6 +11,7 @@ import { generateId } from "@readany/core/utils";
 import {
   ArrowLeft,
   Bookmark,
+  BrainCircuit,
   Headphones,
   List,
   Maximize,
@@ -40,6 +41,7 @@ interface ReaderToolbarProps {
   onToggleToc?: () => void;
   onToggleSettings?: () => void;
   onToggleChat?: () => void;
+  onToggleLearning?: () => void;
   onToggleTTS?: () => void;
   chapterTranslationState: ChapterTranslationState;
   onChapterTranslationStart: (targetLang?: string) => void;
@@ -48,6 +50,7 @@ interface ReaderToolbarProps {
   onToggleTranslationVisible: () => void;
   onChapterTranslationReset: () => void;
   isChatOpen?: boolean;
+  isLearningOpen?: boolean;
   isTTSActive?: boolean;
   isFixedLayout?: boolean;
   fixedLayoutZoom?: number;
@@ -73,6 +76,7 @@ export function ReaderToolbar({
   onToggleToc,
   onToggleSettings,
   onToggleChat,
+  onToggleLearning,
   onToggleTTS,
   chapterTranslationState,
   onChapterTranslationStart,
@@ -81,6 +85,7 @@ export function ReaderToolbar({
   onToggleTranslationVisible,
   onChapterTranslationReset,
   isChatOpen,
+  isLearningOpen,
   isTTSActive,
   isFixedLayout = false,
   fixedLayoutZoom = 1,
@@ -298,6 +303,16 @@ export function ReaderToolbar({
           title={isPinned ? t("reader.unpinToolbar") : t("reader.pinToolbar")}
         >
           <Pin className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={`h-7 w-7 ${isLearningOpen ? "bg-primary/10 text-primary" : ""}`}
+          onClick={onToggleLearning}
+          title={t("learning.title")}
+          aria-pressed={isLearningOpen}
+        >
+          <BrainCircuit className="h-3.5 w-3.5" />
         </Button>
         <Button
           variant="ghost"

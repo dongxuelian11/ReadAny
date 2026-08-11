@@ -56,7 +56,9 @@
     "./hooks/reader/*": "./src/hooks/reader/*.ts",
     "./events/*": "./src/events/*.ts",
     "./feedback": "./src/feedback/index.ts",
-    "./feedback/*": "./src/feedback/*.ts"
+    "./feedback/*": "./src/feedback/*.ts",
+    "./learning": "./src/learning/index.ts",
+    "./learning/*": "./src/learning/*.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.712.0",

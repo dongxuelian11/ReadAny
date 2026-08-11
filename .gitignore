@@ -41,6 +41,9 @@ pnpm-debug.log*
 __pycache__/
 *.py[cod]
 
+# Pinned Read-Box development checkout and derived worker cache
+.readbox/
+
 readese/*
 
 # Local WebDAV test server

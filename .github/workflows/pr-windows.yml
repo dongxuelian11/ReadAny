@@ -113,6 +113,32 @@ jobs:
       - name: Build Windows NSIS installer
         run: pnpm --filter app tauri build --config src-tauri/tauri.ci.conf.json --ci
 
+  blocking-readbox-integration:
+    name: Blocking gate - pinned Read-Box real integration
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.11.32"
+
+      - name: Install Read-Box Python runtime
+        run: uv python install 3.14
+
+      - name: Acquire and verify pinned Read-Box source
+        run: node scripts/readbox-source.mjs ensure
+
+      - name: Exercise real Read-Box health, mapping, digest, QA, and quiz contracts
+        run: node scripts/readbox-integration.mjs
+
   known-upstream-baseline-debt:
     name: Non-gating observation - known upstream lint and CLI debt
     runs-on: windows-latest

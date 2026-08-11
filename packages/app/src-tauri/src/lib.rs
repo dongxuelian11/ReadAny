@@ -1,5 +1,6 @@
 mod db;
 mod readany_cli;
+mod readbox;
 mod storage;
 mod sync;
 mod vector;
@@ -29,6 +30,7 @@ pub fn run() {
         .manage(VectorDBState {
             db: Mutex::new(None),
         })
+        .manage(readbox::ReadBoxState::default())
         .invoke_handler(tauri::generate_handler![
             sync::commands::sync_vacuum_into,
             sync::commands::sync_integrity_check,
@@ -45,7 +47,18 @@ pub fn run() {
             vector::vector_reinit,
             vector::vector_shutdown,
             readany_cli::readany_cli_run,
+            readbox::readbox_start,
+            readbox::readbox_status,
+            readbox::readbox_stop,
         ])
+        .on_window_event(|window, event| {
+            if window.label() == "main"
+                && matches!(event, tauri::WindowEvent::CloseRequested { .. })
+            {
+                let state = window.state::<readbox::ReadBoxState>();
+                readbox::stop_on_app_close(&state);
+            }
+        })
         .setup(|app| {
             let app_handle = app.handle().clone();
             #[cfg(any(target_os = "windows", target_os = "linux"))]
