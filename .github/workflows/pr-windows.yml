@@ -71,7 +71,10 @@ jobs:
           }
 
       - name: Core tests
-        run: pnpm test
+        # The PDF worker-backed chapter test can exceed Vitest's 5s default on
+        # a cold Windows runner. Keep the real full suite blocking with a
+        # bounded timeout instead of retrying or skipping the test.
+        run: pnpm --filter @readany/core test -- --testTimeout=30000
 
       - name: Expo tests
         run: pnpm --filter @readany/app-expo test
