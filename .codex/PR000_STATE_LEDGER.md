@@ -16,6 +16,7 @@ Last updated: 2026-08-11 (Asia/Shanghai)
 - Implementation commit before final ledger reconciliation: `1886d9b12a0ffeacae8b795f13db89a5b87edfa1`
 - Final branch HEAD: the commit containing the final ledger reconciliation; its exact SHA is verified from Git and GitHub after that commit because a Git commit cannot contain its own SHA.
 - R1 starting HEAD, re-verified locally and on GitHub: `434838b36bdb369435018e87faedf997489f1b17`.
+- R1 implementation HEAD before final ledger reconciliation: `468941f088f367b00fe0dc68699e50bc1f51e4cb`.
 
 ## R1 bounded correction scope
 
@@ -51,10 +52,10 @@ Last updated: 2026-08-11 (Asia/Shanghai)
 - GitHub CLI account: `dongxuelian11`; authentication re-verified PASS on 2026-08-11 with `repo` and `workflow` scopes.
 - Public fork: PASS — `https://github.com/dongxuelian11/ReadAny` is PUBLIC, `isFork=true`, parent `codedogQBY/ReadAny`, and fork `main` is `3f8826c37391721289f4d6db47bacc0c73788572`.
 - R1 recovery verification: PASS — local HEAD, tracked origin branch, and GitHub branch all equal `434838b36bdb369435018e87faedf997489f1b17`; origin/upstream identities match authority; origin/upstream `main` both equal the frozen base.
-- Mistaken upstream PR: OPEN — `https://github.com/codedogQBY/ReadAny/pull/648`; exact base `3f8826c37391721289f4d6db47bacc0c73788572`, exact head `434838b36bdb369435018e87faedf997489f1b17`; no comment yet.
+- Mistaken upstream PR: CLOSED without merge — `https://github.com/codedogQBY/ReadAny/pull/648`; correction comment: `https://github.com/codedogQBY/ReadAny/pull/648#issuecomment-5247941617`.
 - Upstream PR CI: BLOCKED (`action_required`) — final observed upstream run for the R1 starting head is `31447755045`; jobs never started because upstream-maintainer approval is required.
-- Fork-internal replacement PR: NOT_RUN — no PR exists yet for the branch in `dongxuelian11/ReadAny`.
-- Fork-internal CI: NOT_RUN.
+- Fork-internal replacement PR: OPEN — `https://github.com/dongxuelian11/ReadAny/pull/1`; base `main` at `3f8826c37391721289f4d6db47bacc0c73788572`, implementation head `468941f088f367b00fe0dc68699e50bc1f51e4cb` before final ledger reconciliation.
+- Fork-internal CI run: COMPLETE — `https://github.com/dongxuelian11/ReadAny/actions/runs/31448993167`; workflow conclusion SUCCESS, blocking quality SUCCESS, blocking Windows NSIS SUCCESS, known-upstream-debt observation FAILURE and explicitly non-gating.
 
 ## Materially changed files
 
@@ -90,17 +91,23 @@ Last updated: 2026-08-11 (Asia/Shanghai)
 - PASS — R1 structural verification parsed both JSON files and workflow YAML, enforced all 11 integration identities/statuses, found no public-ledger local absolute path, and passed `git diff --check`.
 - PASS — R1 local blocking-command verification: dependency install completed with repository-pinned pnpm 9.15.0; Core 566/566, Expo 3/3, frontend production build, and Windows Tauri NSIS production build passed.
 - FAIL (`BASELINE_FAILURE`) — R1 debt observation reproduced full lint at 1,621 errors/284 warnings and full CLI at 124/135 passing with 11 failures; no product code or baseline-debt source was changed.
+- PASS — appended R1 commit `468941f088f367b00fe0dc68699e50bc1f51e4cb` to the existing public branch and pushed normally without rewriting history.
+- PASS — left the required correction comment on upstream PR #648 and closed it without merge or branch deletion.
+- PASS — created fork-internal PR `https://github.com/dongxuelian11/ReadAny/pull/1` against the exact frozen base.
+- PASS — fork-internal blocking quality job `93649215652` completed successfully, including install, patch whitespace, changed JSON/YAML validation, Core, Expo, and frontend production build.
+- PASS — fork-internal blocking Windows NSIS job `93649215676` completed successfully; the real Tauri NSIS command ran for the PR head.
+- FAIL (`BASELINE_FAILURE`, non-gating) — fork-internal debt job `93649215623` completed as visible FAILURE after running full lint and full CLI tests and writing the step summary; workflow conclusion remained SUCCESS because that job is explicitly non-gating.
 
 ## Pending / next action
 
 - PASS — implemented and locally verified the R1 workflow, integration-registry, and public-ledger corrections.
-- PENDING — commit and push R1 on the existing branch without rewriting history.
-- PENDING — comment on and close upstream PR #648 without merging it.
-- NOT_RUN — create the fork-internal replacement PR and inspect its real blocking and baseline-observation CI.
+- PASS — committed and pushed R1 on the existing branch without rewriting history.
+- PASS — commented on and closed upstream PR #648 without merging it.
+- PASS — created the fork-internal replacement PR and inspected its real blocking and baseline-observation CI to completion.
 - PASS — refreshed the Git index stat cache; `packages/app/src-tauri/Cargo.toml` is clean and has no staged or unstaged content change.
 - PASS — reviewed the complete staged diff and confirmed that it contains only the seven intended PR-000 files.
 - PASS — validated both JSON files, parsed the workflow YAML, and passed `git diff --cached --check`.
-- Next bounded action: review the complete three-file R1 diff, commit, and push the existing branch without rewriting history.
+- Next bounded action: commit and push this final ledger reconciliation, verify the replacement PR head and resulting latest CI, then stop without starting PR-001.
 
 ## Test and build truth
 
@@ -121,12 +128,15 @@ Last updated: 2026-08-11 (Asia/Shanghai)
 | R1 blocking quality commands | PASS | Core 75 files/566 tests; Expo 2 files/3 tests; frontend TypeScript/Vite production build completed. Local root-script wrappers encounter Codex runtime pnpm 11 precedence, so equivalent repository-defined package filters were executed with Corepack pnpm 9.15.0; GitHub Actions installs pnpm 9 before running the root scripts. |
 | R1 blocking Windows NSIS command | PASS | `corepack pnpm --filter app tauri build --config src-tauri/tauri.ci.conf.json --ci` exited 0 and produced `ReadAny_1.3.5_x64-setup.exe`. |
 | R1 baseline-debt observation | FAIL (`BASELINE_FAILURE`, non-gating by design) | Full lint reproduced 1,621 errors/284 warnings; full CLI tests reproduced 5/7 files and 124/135 tests passing with 11 failures. The workflow runs both commands in full, writes their real outcomes and frozen baseline to the step summary, and leaves the observation visibly failed without gating the two blocking jobs. |
-| R1 fork-internal pull-request CI | NOT_RUN | Replacement PR has not yet been created. |
+| R1 fork-internal blocking quality CI | PASS | Run `31448993167`, job `93649215652`: dependency install, `git diff --check`, changed JSON/YAML validation, Core, Expo, and frontend production build all completed successfully. |
+| R1 fork-internal Windows NSIS CI | PASS | Run `31448993167`, job `93649215676`: dependency/Rust setup and real Tauri NSIS production build completed successfully. |
+| R1 fork-internal baseline-debt CI | FAIL (`BASELINE_FAILURE`, non-gating) | Run `31448993167`, job `93649215623`: full lint and CLI commands ran; the summary recorded frozen debt and the final explicit step kept the job visibly failed. Job-level `continue-on-error` made the overall workflow conclusion SUCCESS without misreporting the debt job as PASS. |
 
 ## Completion determination
 
 - Original PR-000 fork, commit, push, and upstream PR creation: COMPLETE, but upstream PR target was incorrect and is being corrected by R1.
-- R1 implementation, replacement PR, and fork-internal CI: PENDING / NOT_RUN as recorded above.
+- R1 implementation, same-branch push, upstream PR correction, fork-internal replacement PR, and blocking CI: COMPLETE.
+- Known upstream lint and CLI debt: remains visible FAIL and explicitly non-gating; not classified as PASS and not silently removed.
 - PR-001: NOT_STARTED and out of scope.
 
 ## Recovery protocol
