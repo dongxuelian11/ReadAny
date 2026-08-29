@@ -1,4 +1,5 @@
 import { ChatPanel } from "@/components/chat/ChatPanel";
+import { LearningPanel } from "@/components/reader/LearningPanel";
 /**
  * ReaderView — main reader page component.
  *
@@ -35,6 +36,7 @@ import { getPlatformService } from "@readany/core/services";
 import { getCSSFontFace, useFontStore, useReadingSessionStore } from "@readany/core/stores";
 import { useRubyStore } from "@readany/core/stores/ruby-store";
 import { splitNarrationText } from "@readany/core/tts";
+import type { LearningCitation } from "@readany/core/learning";
 import type { CitationPart, HighlightColor } from "@readany/core/types";
 import { eventBus } from "@readany/core/utils/event-bus";
 import { throttle } from "@readany/core/utils/throttle";
@@ -798,6 +800,7 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
   const [totalPages, setTotalPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(0);
   const [showChat, setShowChat] = useState(false);
+  const [showLearning, setShowLearning] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showTTS, setShowTTS] = useState(false);
   const [isReimporting, setIsReimporting] = useState(false);
@@ -818,6 +821,12 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
     defaultWidth: 320,
     minWidth: 200,
     maxWidth: 600,
+  });
+  const learningPanel = useResizablePanel({
+    storageKey: "reader-learning-panel-width",
+    defaultWidth: 360,
+    minWidth: 300,
+    maxWidth: 560,
   });
   const tocPanel = useResizablePanel({
     storageKey: "reader-toc-panel-width",
@@ -1821,6 +1830,7 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
       );
 
       // Open chat panel
+      setShowLearning(false);
       setShowChat(true);
 
       // Also dispatch event for immediate handling if panel is already open
@@ -1840,7 +1850,18 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
   const handleCloseSelection = useCallback(() => setSelection(null), []);
   const handleToggleSearch = useCallback(() => setShowSearch((p) => !p), []);
   const handleToggleToc = useCallback(() => setShowToc((p) => !p), []);
-  const handleToggleChat = useCallback(() => setShowChat((p) => !p), []);
+  const handleToggleChat = useCallback(() => {
+    setShowChat((open) => {
+      if (!open) setShowLearning(false);
+      return !open;
+    });
+  }, []);
+  const handleToggleLearning = useCallback(() => {
+    setShowLearning((open) => {
+      if (!open) setShowChat(false);
+      return !open;
+    });
+  }, []);
   const handleToggleSettings = useCallback(() => setShowSettings((p) => !p), []);
 
   useEffect(() => {
@@ -2831,6 +2852,22 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
     [navigateToCfi, navigateToReaderLocation],
   );
 
+  const handleNavigateToLearningCitation = useCallback(
+    (citation: LearningCitation) => {
+      const { cfi, chapterIndex } = citation.canonicalLocation;
+      if (cfi) {
+        if (cfi.startsWith("page:")) {
+          navigateToReaderLocation(cfi);
+        } else {
+          navigateToCfi(cfi);
+        }
+        return;
+      }
+      foliateRef.current?.goToIndex(chapterIndex);
+    },
+    [navigateToCfi, navigateToReaderLocation],
+  );
+
   if (!readerTab) {
     return <div className="flex h-full items-center justify-center">{t("common.loading")}</div>;
   }
@@ -3067,6 +3104,7 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
             onToggleToc={handleToggleToc}
             onToggleSettings={handleToggleSettings}
             onToggleChat={handleToggleChat}
+            onToggleLearning={handleToggleLearning}
             onToggleTTS={handleToggleTTS}
             chapterTranslationState={chapterTranslation.state}
             onChapterTranslationStart={chapterTranslation.startTranslation}
@@ -3075,6 +3113,7 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
             onToggleTranslationVisible={chapterTranslation.toggleTranslationVisible}
             onChapterTranslationReset={chapterTranslation.reset}
             isChatOpen={showChat}
+            isLearningOpen={showLearning}
             isTTSActive={showTTS || ttsPlayState !== "stopped"}
             isFixedLayout={isFixedLayout}
             fixedLayoutZoom={fixedLayoutZoom}
@@ -3179,6 +3218,34 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
           </>
         )}
       </div>
+
+      {/* Learning Agent — quiet Reader-side auxiliary layer, resizable */}
+      {showLearning && book && (
+        <aside
+          className="relative ml-1 flex shrink-0 flex-col overflow-hidden rounded-lg border border-border/60 bg-background shadow-sm"
+          style={{ width: learningPanel.width }}
+          aria-label={t("learning.title")}
+        >
+          <ResizeHandle
+            side="left"
+            onResizeStart={learningPanel.handleResizeStart}
+            onResize={(delta) => learningPanel.handleResize(delta, "left")}
+            onResizeEnd={learningPanel.handleResizeEnd}
+          />
+          <div className="flex h-10 shrink-0 items-center justify-between border-b border-border/40 px-3">
+            <span className="text-xs font-medium text-foreground">{t("learning.title")}</span>
+            <button
+              type="button"
+              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => setShowLearning(false)}
+              aria-label={t("common.close")}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <LearningPanel book={book} onNavigateToCitation={handleNavigateToLearningCitation} />
+        </aside>
+      )}
 
       {/* AI Chat sidebar — RIGHT side, resizable */}
       {showChat && (

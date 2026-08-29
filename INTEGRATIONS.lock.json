@@ -17,11 +17,12 @@
     {
       "repo": "wenhui426/read-box",
       "role": "Required reading service integration",
-      "integration_intent": "Must be connected through a real adapter before the first formal release; PR-000 records the requirement but does not integrate it.",
-      "status": "REQUIRED_FOR_FIRST_RELEASE",
-      "exact_ref": null,
-      "license": "UNKNOWN",
-      "integration_mode": "ADAPTER"
+      "integration_intent": "PR-001 connects the native FastAPI agents through a rebuildable per-chapter derived cache while ReadAny retains canonical book/source authority.",
+      "status": "PARTIAL",
+      "exact_ref": "15f766f19f1ab204535f1947983fa397540352c8",
+      "license": "UNVERIFIED: README DECLARES MIT; LICENSE FILE ABSENT",
+      "integration_mode": "NATIVE_API_DERIVED_CACHE",
+      "release_gate": "BLOCKED_PENDING_LICENSE_CLARIFICATION"
     },
     {
       "repo": "vitalysim/the-knowledge-guy",
