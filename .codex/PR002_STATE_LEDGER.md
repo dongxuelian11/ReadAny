@@ -41,9 +41,9 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 ## UI skill truth
 
-- `apple-design`: REQUIRED for the user-facing Book Skill view; full project SKILL.md must be read before UI implementation. Status: NOT_RUN.
-- `emil-design-eng`: REQUIRED for the user-facing Book Skill view; full project SKILL.md must be read before UI implementation. Status: NOT_RUN.
-- `review-animations`: only required if motion is added; none planned.
+- `apple-design`: REQUIRED for the user-facing Book Skill panel; full project SKILL.md read on 2026-08-30 before implementation; applied (all panel states designed, restrained auxiliary layer, reading focus preserved).
+- `emil-design-eng`: REQUIRED for the user-facing Book Skill panel; full project SKILL.md read on 2026-08-30 before implementation; applied (specific-property transitions, responsive controls, hierarchy via weight/size).
+- `review-animations`: not applicable — no motion was added.
 
 ## Git and authority truth
 
@@ -54,15 +54,23 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 ## Test truth
 
-- PR-002 automated tests: `NOT_RUN`.
-- Real pinned TKG integration test (pipeline against local deterministic provider + `lint_chapters.py` quality gate): `NOT_RUN`.
-- Real DeepSeek E2E: `NOT_RUN` (no local key known; run only if a key is provided by the user, never persisting or committing it).
-- Blocking quality gate: `NOT_RUN`.
-- Blocking Windows NSIS gate: `NOT_RUN`.
+- PR-002 unit tests: `PASS` — full core suite now 77 files / 596 tests (was 76/574; the +1 file / +22 tests are `src/book-skill/book-skill.test.ts`: book numbering EN+ZH, response boundary, spine/reduce validation, pipeline generate/resume/rebuild/stub, SKILL.md rendering, cost estimate, panel reducer).
+- Real pinned TKG integration test: `PASS` locally (2026-08-30) — `vitest.integration.config.ts` → `src/book-skill/integration/tkg-pipeline.int.ts`: pinned source acquired+verified (`052049f4`, `VERIFIED_MIT`, frozen contract files present), real `createBookSkillLlmClient` via the unified gateway against a local deterministic OpenAI-compatible endpoint, real pipeline wrote the upstream layout (SKILL.md, chapters/, chapters_manifest.json, raw/), and the upstream `lint_chapters.py --strict` gate passed with `0 warning(s)`. First run honestly FAILED the lint gate (192-word toolkits below the 200-word band) and was fixed by enriching the deterministic fixture — the gate is real, not decorative.
+- Real DeepSeek E2E: `NOT_RUN` (no local key; run only if the user provides one, never persisted or committed).
+- Blocking quality gate (CI): `PENDING` — runs on the pushed exact head.
+- Blocking Windows NSIS gate (CI): `PENDING`.
+- App typecheck `tsc --noEmit`: `PASS`.
 
 ## Blockers / partial truth
 
 - None currently. Vision / image understanding intentionally unsupported in this slice (text-only); this is a documented honest limitation, not a hidden gap.
+
+## Implemented so far (2026-08-30)
+
+- Core `@readany/core/book-skill` (exported via `./book-skill`): types, 14 genre profiles, book_number port (EN + Chinese titles) with upstream two-pass algorithm, CJK-aware word/token estimation, response boundary (failure-text rejection, JSON extraction, toolkit validation), prompt contracts for Spine/MAP/REDUCE, deterministic SKILL.md/spine renderers, cost estimate, resumable pipeline with content-version rebuild + honest stubs + manifest validation, panel reducer, aiConfig client factory.
+- App: Tauri fs adapter, trigger (canonical chapters via fallbackContentService, skill dir under `<appData>/book-skills/<bookId>/`), persisted `book-skill-registry` store (entries + genre preferences), `BookSkillPanel` (all states, genre select, progress, thesis/frameworks/concept-map/topic-index/chapter-index views with per-chapter "back to source" navigation), toolbar toggle + resizable panel mount in ReaderView, `bookSkill` i18n block in en/zh/zh-TW.
+- Scripts/CI: `scripts/tkg-source.mjs` (pinned acquisition + fail-closed verification incl. MIT license truth), `vitest.integration.config.ts`, integration test, `blocking-tkg-integration` CI job, `tkg:source/verify/test:real` npm scripts.
+- Governance: `docs/integrations/THE_KNOWLEDGE_GUY_PR002.md`, `INTEGRATIONS.lock.json` TKG entry now `PARTIAL / ORCHESTRATED_PIPELINE_PORT / VERIFIED MIT`, this ledger.
 
 ## Next exact action
 

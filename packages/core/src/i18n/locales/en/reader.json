@@ -197,5 +197,68 @@
       "quiz-complete": "Chapter quiz complete",
       "error": "Learning request failed; reading remains available"
     }
+  },
+  "bookSkill": {
+    "title": "Book Skill",
+    "retry": "Try again",
+    "estimateTitle": "Whole-book skill",
+    "chapters": "Chapters",
+    "estimatedInput": "Estimated input tokens",
+    "estimatedOutput": "Estimated output tokens",
+    "estimateNote": "The concept map, per-chapter toolkits, and chapter indexes are extracted from this book's original text. You can keep reading while it runs.",
+    "genreLabel": "Book genre",
+    "preparing": "Preparing…",
+    "generate": "Generate Book Skill",
+    "generatingTitle": "Generating the Book Skill",
+    "generatingSpine": "Reading the book's spine (thesis and frameworks)",
+    "generatingMap": "Extracting each chapter's toolkit",
+    "generatingReduce": "Building the concept map and indexes",
+    "generatingNote": "Existing chapter toolkits are reused, so an interrupted run can be resumed.",
+    "progressChapters": "{{completed}}/{{total}} chapters",
+    "thesis": "Book thesis",
+    "coreFrameworks": "Core frameworks",
+    "conceptMap": "Concept map",
+    "topicIndex": "Topic index",
+    "chapterIndex": "Chapter index",
+    "failed": "failed",
+    "failedChapters": "{{count}} chapter(s) could not be extracted and are marked as failed.",
+    "regenerate": "Regenerate",
+    "builtAt": "Built {{date}}",
+    "backToSource": "Back to original text",
+    "backToSourceShort": "ch {{chapter}}",
+    "relation": {
+      "builds-on": "builds on",
+      "requires": "requires",
+      "instance-of": "instance of",
+      "failure-mode-of": "failure mode of",
+      "trades-off-against": "trades off against",
+      "contradicts": "contradicts",
+      "refines": "refines"
+    },
+    "genre": {
+      "technical": "Technical",
+      "vulnHunting": "Vuln-hunting / security",
+      "financial": "Financial",
+      "scientific": "Scientific",
+      "legal": "Legal / regulatory",
+      "textbook": "Textbook",
+      "reference": "Reference / cookbook",
+      "business": "Business / leadership",
+      "psychology": "Psychology",
+      "history": "History",
+      "productivity": "Productivity",
+      "biography": "Biography / memoir",
+      "narrative": "Narrative non-fiction",
+      "general": "Not sure (general)"
+    },
+    "phase": {
+      "idle": "Waiting for this book",
+      "unavailable": "Book Skill unavailable; reading remains available",
+      "estimating": "Measuring this book",
+      "estimate-ready": "Ready to generate the whole-book skill",
+      "generating": "Generating the Book Skill",
+      "ready": "Book Skill ready",
+      "error": "Book Skill generation failed; reading remains available"
+    }
   }
 }

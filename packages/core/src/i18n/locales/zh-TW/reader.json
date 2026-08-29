@@ -193,5 +193,68 @@
       "quiz-complete": "本章小測已完成",
       "error": "學習請求失敗；閱讀仍可繼續"
     }
+  },
+  "bookSkill": {
+    "title": "本書技能",
+    "retry": "重試",
+    "estimateTitle": "全書技能",
+    "chapters": "章節數",
+    "estimatedInput": "預計輸入 tokens",
+    "estimatedOutput": "預計輸出 tokens",
+    "estimateNote": "概念圖、每章工具箱與章節索引都會從本書原文中擷取。生成期間你可以繼續閱讀。",
+    "genreLabel": "書籍類型",
+    "preparing": "正在統計…",
+    "generate": "生成本書技能",
+    "generatingTitle": "正在產生全書技能",
+    "generatingSpine": "正在讀取全書主旨與框架清單",
+    "generatingMap": "正在逐章擷取工具箱",
+    "generatingReduce": "正在建構概念圖與索引",
+    "generatingNote": "已完成的章節工具箱會被複用，中斷後可以繼續。",
+    "progressChapters": "已完成 {{completed}}/{{total}} 章",
+    "thesis": "全書主旨",
+    "coreFrameworks": "核心框架",
+    "conceptMap": "概念圖",
+    "topicIndex": "主題索引",
+    "chapterIndex": "章節索引",
+    "failed": "失敗",
+    "failedChapters": "有 {{count}} 章擷取失敗，已如實標記。",
+    "regenerate": "重新產生",
+    "builtAt": "產生於 {{date}}",
+    "backToSource": "返回原文",
+    "backToSourceShort": "第 {{chapter}} 章",
+    "relation": {
+      "builds-on": "建立在",
+      "requires": "依賴",
+      "instance-of": "是……的實例",
+      "failure-mode-of": "是……的失效模式",
+      "trades-off-against": "與……相權衡",
+      "contradicts": "與……相矛盾",
+      "refines": "細化了"
+    },
+    "genre": {
+      "technical": "技術",
+      "vulnHunting": "資安攻防",
+      "financial": "金融投資",
+      "scientific": "科學學術",
+      "legal": "法律合規",
+      "textbook": "教材",
+      "reference": "參考手冊",
+      "business": "商業管理",
+      "psychology": "心理學",
+      "history": "歷史",
+      "productivity": "個人成長",
+      "biography": "傳記",
+      "narrative": "敘事非虛構",
+      "general": "不確定（通用）"
+    },
+    "phase": {
+      "idle": "等待本書",
+      "unavailable": "本書技能不可用；閱讀仍可繼續",
+      "estimating": "正在統計本書",
+      "estimate-ready": "可以產生全書技能",
+      "generating": "正在產生全書技能",
+      "ready": "本書技能已就緒",
+      "error": "本書技能產生失敗；閱讀仍可繼續"
+    }
   }
 }
