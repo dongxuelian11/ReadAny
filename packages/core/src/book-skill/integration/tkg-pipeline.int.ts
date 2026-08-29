@@ -2,25 +2,77 @@
 //
 // Exercises the actual chain end to end, with no mocks standing in for our
 // own code:
-//   pinned TKG source acquisition -> real aiConfig-driven LLM client
+//   pinned TKG source verification -> real aiConfig-driven LLM client
 //   (createChatModel via a local deterministic OpenAI-compatible endpoint) ->
 //   the real Book Skill pipeline writing the real derived file layout ->
 //   the upstream TKG lint_chapters.py --strict quality gate on the result.
 //
 // The ONLY substituted piece is the external LLM endpoint, exactly like the
 // PR-001 Read-Box integration harness. The output labels this honestly.
+//
+// Note: this file deliberately does NOT import scripts/tkg-source.mjs —
+// vitest cannot reliably evaluate modules outside the package root. The
+// acquisition itself is `node scripts/tkg-source.mjs ensure` (the CI step
+// before this test); here we re-verify the checkout read-only and cross-check
+// the pinned ref against the acquisition script's constant by text.
 
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { TKG_REF, ensureTkgSource, tkgCheckoutDir } from "../../../../../scripts/tkg-source.mjs";
 import type { AIConfig } from "../../types/chat";
 import { createBookSkillLlmClient } from "../llm";
 import { generateBookSkill } from "../pipeline";
+import { TKG_UPSTREAM_REF } from "../types";
 import type { BookSkillFs } from "../types";
+
+const TKG_UPSTREAM_REPO = "https://github.com/vitalysim/the-knowledge-guy.git";
+
+function repoRoot(): string {
+  // packages/core/<...up to integration/> -> repo root is three levels up.
+  return resolve(process.cwd(), "..", "..");
+}
+
+function tkgCheckoutDir(): string {
+  return process.env.TKG_CHECKOUT_DIR ?? join(repoRoot(), ".tkg", "upstream", TKG_UPSTREAM_REF);
+}
+
+function tkgAcquisitionScript(): string {
+  return join(repoRoot(), "scripts", "tkg-source.mjs");
+}
+
+function tkgLintPath(): string {
+  return join(
+    tkgCheckoutDir(),
+    ".claude",
+    "skills",
+    "book-to-skill",
+    "scripts",
+    "lint_chapters.py",
+  );
+}
+
+function verifyPinnedCheckout(): void {
+  const head = spawnSync("git", ["-C", tkgCheckoutDir(), "rev-parse", "HEAD"], {
+    encoding: "utf8",
+    timeout: 30000,
+  });
+  if (head.error || head.status !== 0) {
+    throw new Error(
+      `TKG checkout not usable at ${tkgCheckoutDir()}: ${head.stderr ?? head.error?.message ?? "unknown"}. Run \`node scripts/tkg-source.mjs ensure\` first (the CI workflow does this before the test).`,
+    );
+  }
+  expect(head.stdout.trim()).toBe(TKG_UPSTREAM_REF);
+
+  // Cross-check the pinned ref against the acquisition script's constant by
+  // text, so the two declaration sites cannot drift apart silently.
+  const scriptText = readFileSync(tkgAcquisitionScript(), "utf8");
+  expect(/TKG_REF\s*=\s*"([0-9a-f]{40})"/.exec(scriptText)?.[1]).toBe(TKG_UPSTREAM_REF);
+  expect(scriptText).toContain(TKG_UPSTREAM_REPO);
+}
 
 let server: ReturnType<typeof createServer> | null = null;
 let serverPort = 0;
@@ -162,9 +214,7 @@ function deterministicReply(system: string, user: string): string {
 }
 
 beforeAll(async () => {
-  const source = ensureTkgSource();
-  expect(source.exactRef).toBe(TKG_REF);
-  expect(source.license).toBe("VERIFIED_MIT");
+  verifyPinnedCheckout();
 
   server = createServer((request, response) => {
     void (async () => {
@@ -329,7 +379,7 @@ it("generates the two-tier Book Skill and passes the upstream lint gate", async 
   process.stdout.write(
     `${JSON.stringify(
       {
-        pinnedRef: TKG_REF,
+        pinnedRef: TKG_UPSTREAM_REF,
         pipeline: "PASS",
         upstreamLintGate: "PASS",
         chapters: result.manifest.chapters.map((c) => c.book_number),
@@ -340,7 +390,3 @@ it("generates the two-tier Book Skill and passes the upstream lint gate", async 
     )}\n`,
   );
 }, 180000);
-
-function tkgLintPath(): string {
-  return join(tkgCheckoutDir, ".claude", "skills", "book-to-skill", "scripts", "lint_chapters.py");
-}
