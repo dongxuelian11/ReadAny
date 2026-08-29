@@ -139,6 +139,37 @@ jobs:
       - name: Exercise real Read-Box health, mapping, digest, QA, and quiz contracts
         run: node scripts/readbox-integration.mjs
 
+  blocking-tkg-integration:
+    name: Blocking gate - pinned TKG real integration
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Set up Python for the upstream lint gate
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Acquire and verify pinned The Knowledge Guy source
+        run: node scripts/tkg-source.mjs ensure
+
+      - name: Exercise the real Book Skill pipeline against the upstream lint gate
+        run: pnpm --filter @readany/core exec vitest run --config vitest.integration.config.ts
+
   known-upstream-baseline-debt:
     name: Non-gating observation - known upstream lint and CLI debt
     runs-on: windows-latest

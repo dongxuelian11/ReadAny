@@ -1,4 +1,5 @@
 import { ChatPanel } from "@/components/chat/ChatPanel";
+import { BookSkillPanel } from "@/components/reader/BookSkillPanel";
 import { LearningPanel } from "@/components/reader/LearningPanel";
 /**
  * ReaderView — main reader page component.
@@ -801,6 +802,7 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
   const [currentPage, setCurrentPage] = useState(0);
   const [showChat, setShowChat] = useState(false);
   const [showLearning, setShowLearning] = useState(false);
+  const [showBookSkill, setShowBookSkill] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showTTS, setShowTTS] = useState(false);
   const [isReimporting, setIsReimporting] = useState(false);
@@ -824,6 +826,12 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
   });
   const learningPanel = useResizablePanel({
     storageKey: "reader-learning-panel-width",
+    defaultWidth: 360,
+    minWidth: 300,
+    maxWidth: 560,
+  });
+  const bookSkillPanel = useResizablePanel({
+    storageKey: "reader-book-skill-panel-width",
     defaultWidth: 360,
     minWidth: 300,
     maxWidth: 560,
@@ -1858,7 +1866,19 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
   }, []);
   const handleToggleLearning = useCallback(() => {
     setShowLearning((open) => {
-      if (!open) setShowChat(false);
+      if (!open) {
+        setShowChat(false);
+        setShowBookSkill(false);
+      }
+      return !open;
+    });
+  }, []);
+  const handleToggleBookSkill = useCallback(() => {
+    setShowBookSkill((open) => {
+      if (!open) {
+        setShowChat(false);
+        setShowLearning(false);
+      }
       return !open;
     });
   }, []);
@@ -2868,6 +2888,10 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
     [navigateToCfi, navigateToReaderLocation],
   );
 
+  const handleNavigateToBookSkillChapter = useCallback((chapterIndex: number) => {
+    foliateRef.current?.goToIndex(chapterIndex);
+  }, []);
+
   if (!readerTab) {
     return <div className="flex h-full items-center justify-center">{t("common.loading")}</div>;
   }
@@ -3105,6 +3129,7 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
             onToggleSettings={handleToggleSettings}
             onToggleChat={handleToggleChat}
             onToggleLearning={handleToggleLearning}
+            onToggleBookSkill={handleToggleBookSkill}
             onToggleTTS={handleToggleTTS}
             chapterTranslationState={chapterTranslation.state}
             onChapterTranslationStart={chapterTranslation.startTranslation}
@@ -3114,6 +3139,7 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
             onChapterTranslationReset={chapterTranslation.reset}
             isChatOpen={showChat}
             isLearningOpen={showLearning}
+            isBookSkillOpen={showBookSkill}
             isTTSActive={showTTS || ttsPlayState !== "stopped"}
             isFixedLayout={isFixedLayout}
             fixedLayoutZoom={fixedLayoutZoom}
@@ -3244,6 +3270,34 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
             </button>
           </div>
           <LearningPanel book={book} onNavigateToCitation={handleNavigateToLearningCitation} />
+        </aside>
+      )}
+
+      {/* Book Skill — whole-book concept map, quiet Reader-side auxiliary layer, resizable */}
+      {showBookSkill && book && (
+        <aside
+          className="relative ml-1 flex shrink-0 flex-col overflow-hidden rounded-lg border border-border/60 bg-background shadow-sm"
+          style={{ width: bookSkillPanel.width }}
+          aria-label={t("bookSkill.title")}
+        >
+          <ResizeHandle
+            side="left"
+            onResizeStart={bookSkillPanel.handleResizeStart}
+            onResize={(delta) => bookSkillPanel.handleResize(delta, "left")}
+            onResizeEnd={bookSkillPanel.handleResizeEnd}
+          />
+          <div className="flex h-10 shrink-0 items-center justify-between border-b border-border/40 px-3">
+            <span className="text-xs font-medium text-foreground">{t("bookSkill.title")}</span>
+            <button
+              type="button"
+              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => setShowBookSkill(false)}
+              aria-label={t("common.close")}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <BookSkillPanel book={book} onNavigateToChapter={handleNavigateToBookSkillChapter} />
         </aside>
       )}
 

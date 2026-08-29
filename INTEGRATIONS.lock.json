@@ -26,12 +26,12 @@
     },
     {
       "repo": "vitalysim/the-knowledge-guy",
-      "role": "Required knowledge workflow integration",
-      "integration_intent": "Must be connected through a real isolated worker before the first formal release; PR-000 records the requirement but does not integrate it.",
-      "status": "REQUIRED_FOR_FIRST_RELEASE",
-      "exact_ref": null,
-      "license": "UNKNOWN",
-      "integration_mode": "WORKER"
+      "role": "Book Skill / concept map knowledge workflow integration",
+      "integration_intent": "PR-002 ports the book-to-skill runbook stages (Spine, MAP, REDUCE) as in-app orchestration over canonical ReadAny chapters, with lint_chapters.py as a CI quality gate; cross-book routing remains future work.",
+      "status": "PARTIAL",
+      "exact_ref": "052049f45f7baa57c23f24c6e0ac5aba9f5133bb",
+      "license": "VERIFIED MIT (LICENSE file present at pinned ref; GitHub metadata NOASSERTION is a misclassification)",
+      "integration_mode": "ORCHESTRATED_PIPELINE_PORT"
     },
     {
       "repo": "HKUDS/DeepTutor",

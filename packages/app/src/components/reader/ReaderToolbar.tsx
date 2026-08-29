@@ -10,6 +10,7 @@ import type { ChapterTranslationState } from "@readany/core/hooks";
 import { generateId } from "@readany/core/utils";
 import {
   ArrowLeft,
+  BookMarked,
   Bookmark,
   BrainCircuit,
   Headphones,
@@ -42,6 +43,7 @@ interface ReaderToolbarProps {
   onToggleSettings?: () => void;
   onToggleChat?: () => void;
   onToggleLearning?: () => void;
+  onToggleBookSkill?: () => void;
   onToggleTTS?: () => void;
   chapterTranslationState: ChapterTranslationState;
   onChapterTranslationStart: (targetLang?: string) => void;
@@ -51,6 +53,7 @@ interface ReaderToolbarProps {
   onChapterTranslationReset: () => void;
   isChatOpen?: boolean;
   isLearningOpen?: boolean;
+  isBookSkillOpen?: boolean;
   isTTSActive?: boolean;
   isFixedLayout?: boolean;
   fixedLayoutZoom?: number;
@@ -86,6 +89,7 @@ export function ReaderToolbar({
   onChapterTranslationReset,
   isChatOpen,
   isLearningOpen,
+  isBookSkillOpen,
   isTTSActive,
   isFixedLayout = false,
   fixedLayoutZoom = 1,
@@ -97,6 +101,7 @@ export function ReaderToolbar({
   onTogglePinned,
   onMouseEnter,
   onMouseLeave,
+  onToggleBookSkill,
   getPageSnippet,
 }: ReaderToolbarProps) {
   const { t } = useTranslation();
@@ -313,6 +318,16 @@ export function ReaderToolbar({
           aria-pressed={isLearningOpen}
         >
           <BrainCircuit className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={`h-7 w-7 ${isBookSkillOpen ? "bg-primary/10 text-primary" : ""}`}
+          onClick={onToggleBookSkill}
+          title={t("bookSkill.title")}
+          aria-pressed={isBookSkillOpen}
+        >
+          <BookMarked className="h-3.5 w-3.5" />
         </Button>
         <Button
           variant="ghost"
