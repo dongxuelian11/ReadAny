@@ -7,6 +7,7 @@
 - License truth: a standard MIT `LICENSE` file exists at the pinned ref ("Copyright (c) 2026 Vitaly Simonovich"). GitHub's "Other / NOASSERTION" metadata is a misclassification of that file; the license is verified, and unlike Read-Box there is no release-distribution block.
 - Upstream form: the repo ships no server, no spawnable worker, and no orchestrator code. It is two Claude Code SKILL.md runbooks (`book-to-skill`, `the-knowledge-guy`) plus standalone cross-platform Python scripts. Its own principle is literal: "plumbing in Python, intelligence in Claude" — every act of understanding is an LLM call described by the runbooks, executed by an agent host.
 - Frozen contracts consumed by this integration: the Stage 1 chapter template, the Stage 2 concept-map spec (including `chapters_manifest.json` schema_version 2 and the `book_number` vocabulary), the 14 genre profiles, and `lint_chapters.py` (the upstream post-Stage-1 quality gate).
+- Documented minimal-slice deviations from the upstream master SKILL.md template: the "How to Use This Skill" section (upstream slash-command UX, inapplicable in-app) and the "Supporting Files" links (glossary/patterns/cheatsheet are not generated in this slice) are omitted rather than rendered as dangling references; all other template sections are rendered as specified.
 
 ## Decision
 

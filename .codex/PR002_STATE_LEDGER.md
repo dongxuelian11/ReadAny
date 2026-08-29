@@ -66,6 +66,14 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 - None currently. Vision / image understanding intentionally unsupported in this slice (text-only); this is a documented honest limitation, not a hidden gap.
 
+## Final handoff snapshot — 2026-08-30 (pre-merge)
+
+- PASS — CI on the exact head `2d8313f9` (run 33280601850): blocking quality PASS (2m30s), blocking Windows NSIS PASS (7m56s), blocking pinned Read-Box integration PASS (31s), blocking pinned TKG real integration PASS (1m33s). The non-gating baseline-debt observation job FAILed as documented upstream debt; the PR's UNSTABLE merge state is caused solely by that job and was not relabeled.
+- PASS — independent acceptance review of the full `c0199596..2d8313f9` diff (31 files, +3698/−8): 8/8 criteria PASS, 0 blocking, 7 non-blocking observations recorded below.
+- Known non-blocking observations (deliberately not fixed in PR-002; candidates for later polish PRs): (1) BookSkillPanel COMPLETE dispatch is not guarded against book switches mid-generation; (2) panel load does not compare manifest content_version against current book content, and panel "Regenerate" deletes first so the pipeline's content-version rebuild path is currently panel-unreachable (pipeline logic itself is unit-tested); (3) loadBookSkill returns regenerated:true in the direct-load path (no consumer); (4) pipeline warnings for dropped edges/topic entries are in-memory only; (5) handleToggleChat closes Learning but not the Book Skill panel; (6) SKILL.md rendering omits "How to Use This Skill" and "Supporting Files" as documented minimal-slice adaptations; (7) the PR is 3 commits including the `73ab3c75` scaffolding commit.
+- Scope remains frozen: no PR-003 work started. Next-step candidates after merge, in the master-handoff parallel map: Track D source-level Build-vs-Reuse audit, Track E Gutendex, or the cross-book routing that Track B now unblocks.
+- Next exact action: push this housekeeping commit, wait for exact-head blocking CI, then ordinary merge PR #3 (no squash/rebase).
+
 ## Implemented so far (2026-08-30)
 
 - Core `@readany/core/book-skill` (exported via `./book-skill`): types, 14 genre profiles, book_number port (EN + Chinese titles) with upstream two-pass algorithm, CJK-aware word/token estimation, response boundary (failure-text rejection, JSON extraction, toolkit validation), prompt contracts for Spine/MAP/REDUCE, deterministic SKILL.md/spine renderers, cost estimate, resumable pipeline with content-version rebuild + honest stubs + manifest validation, panel reducer, aiConfig client factory.
