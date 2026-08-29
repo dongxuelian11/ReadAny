@@ -1,11 +1,11 @@
 # PR-001 Read-Box Learning Slice State Ledger
 
-Last updated: 2026-08-11 (Asia/Shanghai)
+Last updated: 2026-08-30 (Asia/Shanghai)
 
 ## Immutable task authority
 
 - Objective: implement only the PR-001 Read-Box learning-agent vertical slice inside the existing ReadAny Reader: current-chapter digest, grounded QA, chapter quiz, and citations back to canonical ReadAny source.
-- Authoritative prompt: `C:\Users\Administrator\Downloads\AI_READING_PR001_READBOX_LEARNING_SLICE_CODEX_PROMPT.md` (read fully as UTF-8).
+- Authoritative prompt: `AI_READING_PR001_READBOX_LEARNING_SLICE_CODEX_PROMPT.md` — user-provided external file, read fully as UTF-8 (machine-local download path omitted for portability).
 - Product repository and only product PR target: `https://github.com/dongxuelian11/ReadAny`, base `main`.
 - Forbidden product PR target: `https://github.com/codedogQBY/ReadAny`.
 - Required branch: `feat/pr001-readbox-learning-slice`.
@@ -156,3 +156,15 @@ After compaction/restart: reread the authoritative prompt, this ledger, and the 
 - FAIL (local tooling only, before compilation) — the root `pnpm build` wrapper again resolved non-project pnpm 11 from PATH and aborted its non-TTY module purge. The equivalent direct project-pnpm app build PASSed. Earlier exact CI-mode pnpm 9 Windows NSIS build remains PASS; GitHub uses `pnpm/action-setup` and will be the authoritative blocking result.
 - FAIL (known baseline, unchanged) — whole-crate `cargo fmt --check` still reports unrelated pre-existing Rust formatting debt; the exact PR-001 Rust file check PASSed.
 - Next exact action: stage the reviewed allowlist, inspect the cached diff, commit normally, push only to origin, create the origin-base PR, and wait for exact-head blocking CI.
+
+## Final handoff snapshot — 2026-08-30 (PR-001 R1 governance correction)
+
+- PASS — the reviewed allowlist was committed normally as `5df3aa71f66ff98bf0d82b926c2c7f01b9e63bc1` ("feat: add Read-Box learning slice") and pushed only to `origin/feat/pr001-readbox-learning-slice`.
+- PASS — product PR created: https://github.com/dongxuelian11/ReadAny/pull/2 (base `origin/main` `3f527e89f3904681604d8d403b1d5064f91624d0`, 43 changed files, one commit at that head).
+- PASS — exact-head blocking CI on `5df3aa71` (run 31458546154): blocking quality PASS, blocking Windows NSIS production build PASS, blocking pinned Read-Box real integration PASS. The non-gating "known upstream lint and CLI debt" observation job FAILed as documented baseline debt, not a PR regression; the PR's UNSTABLE merge state is caused solely by that non-gating job and was not relabeled.
+- Final test truth at `5df3aa71`: Core 76 files / 574 tests PASS; Expo 2 files / 3 tests PASS; app production build PASS; targeted Biome PASS; `cargo check` PASS; `cargo test readbox::tests` PASS (2); real pinned Read-Box integration PASS; Windows NSIS PASS. Whole-tree `cargo fmt --check` FAIL remains pre-existing unrelated baseline debt; `REAL_DEEPSEEK_E2E = NOT_RUN` (no local key).
+- Unchanged open truths, deliberately not relabeled: Read-Box license `BLOCKED` (README-only MIT declaration, no license file at the pinned ref); `SELF_CONTAINED_WORKER_IN_INSTALLER = NOT_READY`; generic unmatched citations remain chapter-level `PARTIAL`.
+- R1 governance correction (this commit, executed by GLM-5.3 under the 2026-08-30 master handoff): appended this final handoff snapshot; removed the machine-local absolute prompt path from this ledger while retaining the provenance filename; added `release_gate = BLOCKED_PENDING_LICENSE_CLARIFICATION` to the read-box entry in `INTEGRATIONS.lock.json` (technical integration stays; first formal release redistribution stays blocked pending license clarification). No digest/QA/quiz/runtime/UI/CI code changed, and no user-facing UI was touched, so `apple-design` / `emil-design-eng` / `review-animations` remain not applicable for this increment and no skill usage is claimed.
+- Reverified on 2026-08-30: GitHub `main` remains `3f527e89f3904681604d8d403b1d5064f91624d0` (only PR #1 merged and PR #2 open, no later pushes); the local clone's `main` branch tracks `upstream/main` (`3f8826c37391721289f4d6db47bacc0c73788572`) and must never be used as a product base or push target.
+- Executor handoff: development authority transferred to GLM-5.3 on 2026-08-30 under the master handoff `AI_PERSONAL_LEARNING_OS_GLM53_MASTER_HANDOFF_20260830.md` (user-provided external file; machine-local path intentionally omitted). Post-compaction recovery must reconcile that handoff, this ledger, and live Git/GitHub state before continuing, and must fail closed on disagreement.
+- Next exact action: push this R1 commit to origin, wait for exact-head blocking CI on the new head, obtain independent acceptance, then ordinary merge PR #2 (no squash/rebase). PR-002 scope alignment happens only after this merge.

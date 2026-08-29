@@ -21,7 +21,8 @@
       "status": "PARTIAL",
       "exact_ref": "15f766f19f1ab204535f1947983fa397540352c8",
       "license": "UNVERIFIED: README DECLARES MIT; LICENSE FILE ABSENT",
-      "integration_mode": "NATIVE_API_DERIVED_CACHE"
+      "integration_mode": "NATIVE_API_DERIVED_CACHE",
+      "release_gate": "BLOCKED_PENDING_LICENSE_CLARIFICATION"
     },
     {
       "repo": "vitalysim/the-knowledge-guy",
