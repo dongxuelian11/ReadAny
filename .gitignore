@@ -44,6 +44,9 @@ __pycache__/
 # Pinned Read-Box development checkout and derived worker cache
 .readbox/
 
+# Pinned The Knowledge Guy development checkout and derived book-skill cache
+.tkg/
+
 readese/*
 
 # Local WebDAV test server
