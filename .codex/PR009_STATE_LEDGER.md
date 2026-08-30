@@ -42,17 +42,21 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 ## Test truth
 
-- Teaching tests: `NOT_RUN` at ledger creation.
+- Teaching tests: `PASS` — 1 new file / 7 tests (grounded prompt with review variant + text cap; fail-closed validation; retry-once-then-honest-step-failure via an always-broken fake; session start/supersession/empty-curriculum refusal; idempotent delivery + deterministic grading + evidence path verification (TEACHING source, mc question type, BKT mastery row, FSRS card) + fail-closed guards + session completion; completed-session refusal; learner-state snapshot helper). Learner module total: 11 test files / 86 tests.
+- Full core suite: `PASS` — 87 files / 675 tests (was 86/668; +1 file / +7 tests).
+- Core tsc: `PASS`. App tsc: `PASS`. Biome (learner module + app learner adapters): `PASS` (clean).
 - Existing gates (quality / NSIS / Read-Box / TKG): run unchanged; authoritative result on GitHub CI.
 - Real DeepSeek E2E: `NOT_RUN` (teaching tested against a deterministic fake; no real key calls).
 
 ## Blockers / partial truth
 
-- None currently. Deferred by design: free-text teach-back with LLM grading (the MCQ path is the deterministic MVP), session resume across app restarts beyond the persisted row, UI.
+- None currently. Deferred by design: free-text teach-back with LLM grading (MCQ path is the deterministic MVP), teaching UI (frontend owner), cross-book teaching, web-research enrichment.
 
-## Next exact action
+## Final handoff snapshot — 2026-08-30 (pre-merge)
 
-Implement teaching types/prompts/engine/storage + app trigger + tests; full verification; commit, push, PR, CI, independent acceptance, ordinary merge.
+- Implementation complete: `teaching.ts` (prompt/validation/evidence mapping), `teaching-engine.ts` (session lifecycle: start with supersession, idempotent delivery, deterministic grading through applyEvidenceEvent, fail-closed guards), `teaching-store.ts` (interface), in-memory + SQLite adapters, `learner_teaching_sessions` table, EvidenceSource extended with "TEACHING", app `teaching-trigger.ts` (canonical chapter text via fallback extraction, unified-gateway client).
+- Incidents during this slice, recorded honestly: a careless node-string patch cross-wired the in-memory placement/teaching getActive implementations (caught immediately by placement-engine.test — the deterministic test layer did its job); fixed by hand-repairing stores.ts. One missing `teachings` field in the createSqliteLearnerStores factory was caught by app tsc.
+- Next exact action: push, wait for exact-head blocking CI, independent acceptance, ordinary merge (no squash/rebase). Post-merge: teaching UI belongs to the frontend owner; remaining backend candidates are cross-book routing (Track B continuation) and multi-book goals once a concept graph exists.
 
 ## Recovery protocol
 

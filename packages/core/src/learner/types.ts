@@ -5,6 +5,7 @@
 // in-memory stores (skillcoco-core structural pattern, PR-003 audit).
 
 export type EvidenceSource =
+  | "TEACHING"
   | "READ_BOX_QUIZ"
   | "BOOK_QUIZ"
   | "PLACEMENT"

@@ -6,6 +6,8 @@
 // itself lands with the wiring PR.
 
 import type { PlacementSession, PlacementStore } from "./placement";
+import type { TeachingSession } from "./teaching";
+import type { TeachingStore } from "./teaching-store";
 import type {
   ConceptMastery,
   EvidenceEvent,
@@ -29,6 +31,7 @@ export interface InMemoryLearnerStores {
   mastery: LearnerMasteryStore;
   reviews: LearnerReviewStore;
   placements: PlacementStore;
+  teachings: TeachingStore;
   /** Test/inspection surface: current ledger rows in insertion order. */
   events(): EvidenceEvent[];
   logs(): LearnerReviewLogEntry[];
@@ -105,11 +108,29 @@ export function createInMemoryLearnerStores(_clock?: LearnerClock): InMemoryLear
     },
   };
 
+  const teachingSessions = new Map<string, TeachingSession>();
+  const teachings: TeachingStore = {
+    async get(id) {
+      const session = teachingSessions.get(id);
+      return session ? (JSON.parse(JSON.stringify(session)) as TeachingSession) : null;
+    },
+    async put(session) {
+      teachingSessions.set(session.id, JSON.parse(JSON.stringify(session)) as TeachingSession);
+    },
+    async getActive() {
+      const active = [...teachingSessions.values()]
+        .filter((session) => session.status === "active")
+        .sort((a, b) => b.startedAt - a.startedAt)[0];
+      return active ? (JSON.parse(JSON.stringify(active)) as TeachingSession) : null;
+    },
+  };
+
   return {
     evidence,
     mastery,
     reviews,
     placements,
+    teachings,
     events: () => events.map((event) => ({ ...event })),
     logs: () => logs.map((entry) => ({ ...entry })),
   };

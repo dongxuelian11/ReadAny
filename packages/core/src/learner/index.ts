@@ -13,3 +13,6 @@ export * from "./panel-state";
 export * from "./goal";
 export * from "./goal-parse";
 export * from "./goal-store";
+export * from "./teaching";
+export * from "./teaching-store";
+export * from "./teaching-engine";
