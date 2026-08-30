@@ -4,7 +4,8 @@
 // concepts are reviewed on day boundaries, not minute-level learning steps),
 // and only the serializable card/log shapes from types.ts cross the storage
 // boundary. Correct→Good(3), incorrect→Again(1) is the OpenTutor tracker
-// mapping recorded in the audit.
+// mapping (pinned 0307042, services/lector.py: fsrs_rating = 3 if
+// recalled_correctly else 1).
 
 import {
   type Card,
@@ -90,7 +91,7 @@ function toLogEntry(conceptId: string, log: RecordLogItem["log"]): LearnerReview
 
 /**
  * Apply one review to a concept card. Correct evidence maps to Rating.Good,
- * incorrect to Rating.Again (OpenTutor tracker mapping). Returns the updated
+ * incorrect to Rating.Again (OpenTutor tracker mapping, lector.py:314). Returns the updated
  * serializable card plus the append-only log entry.
  */
 export function reviewConceptCard(

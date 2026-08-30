@@ -89,7 +89,7 @@ describe("FSRS review wrapper (ts-fsrs 5.4.1, fuzz disabled)", () => {
     expect(log.rating).toBe(3);
   });
 
-  it("degrades retrievability as time passes and resets on forget-grade lapses", () => {
+  it("decays retrievability as time passes since the last review", () => {
     const scheduler = createLearnerScheduler();
     const { card } = reviewConceptCard(scheduler, newConceptCard("c", NOW), NOW, true);
     const fresh = retrievabilityOf(scheduler, card, at(0));

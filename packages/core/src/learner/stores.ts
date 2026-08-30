@@ -1,7 +1,9 @@
 // In-memory learner stores for deterministic tests. The append-only rule is
 // enforced here exactly as a SQLite adapter must enforce it: duplicate
-// evidence ids and duplicate (concept, review) log rows are rejected, never
-// upserted. The SQLite adapter itself lands with the wiring PR.
+// evidence ids are rejected, never upserted; nothing is deleted. (Review-log
+// rows are keyed by insertion order; a durable adapter should additionally
+// key them by concept+review to make replays idempotent.) The SQLite adapter
+// itself lands with the wiring PR.
 
 import type {
   ConceptMastery,
