@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { useReadingContext } from "@/lib/ai/reading-context-service";
+import { recordQuizEvidence } from "@/lib/learner/trigger";
 import {
   answerQuiz,
   askReadBox,
@@ -158,6 +159,11 @@ export function LearningPanel({ book, onNavigateToCitation }: LearningPanelProps
         quizAnswer.trim(),
       );
       dispatch({ type: "QUIZ_JUDGED", judgement });
+      // Fire-and-forget: quiz answers double as learner evidence (PR-005). A
+      // persistence failure must never disrupt the quiz UX.
+      void recordQuizEvidence(judgement, bridge.source).catch((error) =>
+        console.error("Failed to record quiz evidence:", error),
+      );
     } catch (error) {
       dispatch({ type: "ERROR", error: error instanceof Error ? error.message : String(error) });
     }

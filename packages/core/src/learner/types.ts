@@ -4,8 +4,6 @@
 // interfaces so hosts implement SQLite adapters (wiring PR) while tests use
 // in-memory stores (skillcoco-core structural pattern, PR-003 audit).
 
-import type { EvidenceQuestionType } from "./bkt";
-
 export type EvidenceSource =
   | "READ_BOX_QUIZ"
   | "BOOK_QUIZ"
@@ -17,6 +15,16 @@ export type EvidenceSource =
   | "LLM_OBSERVATION";
 
 export type EvidenceTaskType = "quiz" | "teach_back" | "transfer" | "review" | "placement";
+
+/** Question shape of the evidence (drives the OpenTutor guess/slip table). */
+export type EvidenceQuestionType =
+  | "mc"
+  | "tf"
+  | "short_answer"
+  | "fill_blank"
+  | "matching"
+  | "select_all"
+  | "free_response";
 
 export type EvidenceResult = "correct" | "incorrect";
 

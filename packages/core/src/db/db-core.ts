@@ -710,6 +710,79 @@ export async function initDatabase(): Promise<void> {
     )
   `);
 
+      // PR-005: deterministic learner core persistence (PR-004 @readany/core/learner).
+      // Append-only evidence ledger (duplicate ids rejected via the primary key),
+      // current mastery rows, and the FSRS review card/log pair. Review logs are
+      // keyed by (concept_id, review) uniqueness so replayed reviews stay
+      // idempotent; see learner/sqlite-stores.ts.
+      await database.execute(`
+    CREATE TABLE IF NOT EXISTS learner_evidence_events (
+      id TEXT PRIMARY KEY,
+      concept_id TEXT NOT NULL,
+      source TEXT NOT NULL,
+      task_type TEXT NOT NULL,
+      question_type TEXT,
+      difficulty INTEGER,
+      result TEXT NOT NULL,
+      confidence REAL NOT NULL,
+      timestamp INTEGER NOT NULL,
+      source_book_id TEXT,
+      source_chapter_index INTEGER,
+      source_cfi TEXT
+    )
+  `);
+      await database.execute(
+        "CREATE INDEX IF NOT EXISTS idx_learner_evidence_concept ON learner_evidence_events(concept_id, timestamp)",
+      );
+      await database.execute(`
+    CREATE TABLE IF NOT EXISTS learner_concept_mastery (
+      concept_id TEXT PRIMARY KEY,
+      mastery REAL NOT NULL,
+      confidence REAL NOT NULL,
+      retention REAL,
+      transfer REAL,
+      last_verified INTEGER,
+      next_review INTEGER,
+      status TEXT NOT NULL,
+      evidence_count INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  `);
+      await database.execute(`
+    CREATE TABLE IF NOT EXISTS learner_review_cards (
+      concept_id TEXT PRIMARY KEY,
+      due INTEGER NOT NULL,
+      stability REAL NOT NULL,
+      difficulty REAL NOT NULL,
+      learning_steps INTEGER NOT NULL,
+      reps INTEGER NOT NULL,
+      lapses INTEGER NOT NULL,
+      state INTEGER NOT NULL,
+      last_review INTEGER
+    )
+  `);
+      await database.execute(
+        "CREATE INDEX IF NOT EXISTS idx_learner_review_cards_due ON learner_review_cards(due)",
+      );
+      await database.execute(`
+    CREATE TABLE IF NOT EXISTS learner_review_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      concept_id TEXT NOT NULL,
+      rating INTEGER NOT NULL,
+      state INTEGER NOT NULL,
+      due INTEGER NOT NULL,
+      stability REAL NOT NULL,
+      difficulty REAL NOT NULL,
+      scheduled_days INTEGER NOT NULL,
+      learning_steps INTEGER NOT NULL,
+      review INTEGER NOT NULL,
+      UNIQUE(concept_id, review)
+    )
+  `);
+      await database.execute(
+        "CREATE INDEX IF NOT EXISTS idx_learner_review_logs_concept ON learner_review_logs(concept_id, review)",
+      );
+
       const platform = getPlatformService();
       if (platform.isDesktop) {
         await cleanupOrphanedSyncRows(database);
