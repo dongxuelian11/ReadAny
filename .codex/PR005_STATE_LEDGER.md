@@ -53,7 +53,10 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 ## Final handoff snapshot — 2026-08-30 (pre-merge)
 
 - Wiring complete: quiz judgement → `quizJudgementToEvidence` → `applyEvidenceEvent` → SQLite stores in readany.db; chapter-scoped interim concept identity `readany:book:<bookId>:chapter:<index>` documented in the mapping module and visible in every stored row; fire-and-forget semantics preserve the quiz UX (reading-session precedent).
-- Next exact action: push, wait for exact-head blocking CI, independent acceptance, ordinary merge (no squash/rebase). Post-merge alignment: PR-006 scope (mastery/review UI view under the UI-skill gate, placement CAT, due-review surface) with the user before code.
+- PASS — CI on the exact head `856d8e8e` (run 33302904803): blocking quality PASS (3m24s, 82 files / 637 tests), blocking Windows NSIS PASS (13m20s), blocking pinned Read-Box integration PASS (34s), blocking pinned TKG integration PASS (2m33s). Non-gating baseline-debt FAILs as documented debt.
+- PASS — independent acceptance review (2026-08-30): 6/6 criteria PASS, 0 blocking, 3 non-blocking notes recorded below.
+- Known non-blocking notes: (1) Read-Box quiz evidence currently carries no questionType/difficulty, so BKT uses parameter defaults (0.2/0.1) — documented, per-type evidence deferred to PR-006; (2) fire-and-forget persistence failures surface only in console — by frozen-scope design; (3) durable review-log idempotency relies on the UNIQUE(concept_id, review) constraint, verified in the adapter tests.
+- Next exact action: wait for exact-head blocking CI on the housekeeping head, then ordinary merge PR #6 (no squash/rebase). Post-merge alignment: PR-006 scope (mastery/review UI view under the UI-skill gate, placement CAT, due-review surface, per-type evidence) with the user before code.
 
 ## Recovery protocol
 
