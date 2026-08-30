@@ -10,6 +10,13 @@
 import { getDB } from "../db/db-core";
 import { runWithDbRetry } from "../db/write-retry";
 import type { IDatabase } from "../services/platform";
+import type {
+  PlacementItem,
+  PlacementResponse,
+  PlacementSession,
+  PlacementSessionStatus,
+  PlacementStore,
+} from "./placement";
 import { DuplicateEvidenceIdError } from "./stores";
 import type {
   ConceptMastery,
@@ -240,12 +247,96 @@ export class SqliteLearnerReviewStore implements LearnerReviewStore {
       ),
     );
   }
+
+  async listCardsDueBefore(timestamp: number, limit?: number): Promise<LearnerReviewCardData[]> {
+    const database = await this.db();
+    const bound = limit ?? -1;
+    const rows = await database.select<Record<string, unknown>>(
+      `SELECT concept_id, due, stability, difficulty, learning_steps, reps, lapses, state, last_review
+       FROM learner_review_cards
+       WHERE due <= ?
+       ORDER BY due ASC
+       ${bound >= 0 ? "LIMIT ?" : ""}`,
+      bound >= 0 ? [timestamp, bound] : [timestamp],
+    );
+    return rows.map((row) => ({
+      conceptId: String(row.concept_id),
+      due: Number(row.due),
+      stability: Number(row.stability),
+      difficulty: Number(row.difficulty),
+      learningSteps: Number(row.learning_steps),
+      reps: Number(row.reps),
+      lapses: Number(row.lapses),
+      state: Number(row.state),
+      lastReview: row.last_review === null ? null : Number(row.last_review),
+    }));
+  }
+}
+
+export class SqlitePlacementStore implements PlacementStore {
+  constructor(private readonly database?: IDatabase) {}
+
+  private async db(): Promise<IDatabase> {
+    return this.database ?? (await getDB());
+  }
+
+  private static rowToSession(row: Record<string, unknown>): PlacementSession {
+    return {
+      id: String(row.id),
+      status: row.status as PlacementSessionStatus,
+      theta: Number(row.theta),
+      startedAt: Number(row.started_at),
+      finalizedAt: row.finalized_at === null ? null : Number(row.finalized_at),
+      items: JSON.parse(String(row.items_json)) as PlacementItem[],
+      responses: JSON.parse(String(row.responses_json) || "[]") as PlacementResponse[],
+    };
+  }
+
+  async get(id: string): Promise<PlacementSession | null> {
+    const database = await this.db();
+    const rows = await database.select<Record<string, unknown>>(
+      "SELECT * FROM learner_placement_sessions WHERE id = ?",
+      [id],
+    );
+    const row = rows[0];
+    return row ? SqlitePlacementStore.rowToSession(row) : null;
+  }
+
+  async put(session: PlacementSession): Promise<void> {
+    const database = await this.db();
+    await runWithDbRetry(() =>
+      database.execute(
+        `INSERT OR REPLACE INTO learner_placement_sessions
+          (id, status, theta, started_at, finalized_at, items_json, responses_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          session.id,
+          session.status,
+          session.theta,
+          session.startedAt,
+          session.finalizedAt,
+          JSON.stringify(session.items),
+          JSON.stringify(session.responses),
+        ],
+      ),
+    );
+  }
+
+  async getActive(): Promise<PlacementSession | null> {
+    const database = await this.db();
+    const rows = await database.select<Record<string, unknown>>(
+      "SELECT * FROM learner_placement_sessions WHERE status = 'active' ORDER BY started_at DESC",
+    );
+    const row = rows[0];
+    return row ? SqlitePlacementStore.rowToSession(row) : null;
+  }
 }
 
 export interface SqliteLearnerStores {
   evidence: LearnerEvidenceStore;
   mastery: LearnerMasteryStore;
   reviews: LearnerReviewStore;
+  placements: PlacementStore;
 }
 
 export function createSqliteLearnerStores(database?: IDatabase): SqliteLearnerStores {
@@ -253,5 +344,6 @@ export function createSqliteLearnerStores(database?: IDatabase): SqliteLearnerSt
     evidence: new SqliteLearnerEvidenceStore(database),
     mastery: new SqliteLearnerMasteryStore(database),
     reviews: new SqliteLearnerReviewStore(database),
+    placements: new SqlitePlacementStore(database),
   };
 }

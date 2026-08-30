@@ -318,7 +318,7 @@ describe("book skill pipeline", () => {
     }
     expect(calls.length).toBe(5); // 1 spine + 3 chapters + 1 reduce
     expect(progress[0]).toBe("checking");
-    expect(progress.at(-1)).toBe("completed");
+    expect(progress[progress.length - 1]).toBe("completed");
     expect(progress).toContain("spine");
     expect(progress).toContain("mapping");
     expect(progress).toContain("reducing");
