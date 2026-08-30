@@ -5,3 +5,7 @@ export * from "./engine";
 export * from "./stores";
 export * from "./evidence-mapping";
 export * from "./sqlite-stores";
+export * from "./placement";
+export * from "./placement-generation";
+export * from "./placement-engine";
+export * from "./queries";

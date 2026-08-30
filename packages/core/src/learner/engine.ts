@@ -45,18 +45,22 @@ export type EvidenceEventInput = Omit<EvidenceEvent, "id" | "timestamp"> & { id?
 /**
  * Derive the display status for a concept at an instant (handoff §11: mastery
  * may degrade Stable → NeedsReview through forgetting, but history is never
- * deleted).
+ * deleted). "unseen" means the system knows nothing: no evidence AND no
+ * verified estimate (placement-written rows carry lastVerified and derive
+ * learning/stable from their mastery).
  */
 export function deriveMasteryStatus(params: {
   evidenceCount: number;
   mastery: number | null;
   retention: number | null;
+  lastVerified?: number | null;
   requestRetention?: number;
   threshold?: number;
 }): MasteryStatus {
   const threshold = params.threshold ?? MASTERY_THRESHOLD;
   const requestRetention = params.requestRetention ?? 0.9;
-  if (params.evidenceCount === 0 || params.mastery === null) return "unseen";
+  if (params.mastery === null) return "unseen";
+  if (params.evidenceCount === 0 && (params.lastVerified ?? null) === null) return "unseen";
   if (params.mastery < threshold) return "learning";
   if (params.retention !== null && params.retention < requestRetention) return "needs_review";
   return "stable";
@@ -118,6 +122,7 @@ export async function applyEvidenceEvent(
       evidenceCount,
       mastery,
       retention,
+      lastVerified: timestamp,
       requestRetention: deps.requestRetention,
     }),
     evidenceCount,
@@ -145,6 +150,7 @@ export async function evaluateConceptMastery(
     evidenceCount: masteryRow.evidenceCount,
     mastery: masteryRow.mastery,
     retention,
+    lastVerified: masteryRow.lastVerified,
     requestRetention: deps.requestRetention,
   });
   const updated: ConceptMastery = { ...masteryRow, retention, status, updatedAt: now.getTime() };

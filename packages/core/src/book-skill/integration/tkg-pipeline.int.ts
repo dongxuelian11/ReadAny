@@ -243,8 +243,9 @@ beforeAll(async () => {
   if (!server) {
     throw new Error("The deterministic provider server was not started");
   }
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  serverPort = (server.address() as { port: number }).port;
+  const httpServer = server;
+  await new Promise<void>((resolve) => httpServer.listen(0, "127.0.0.1", resolve));
+  serverPort = (httpServer.address() as { port: number }).port;
 });
 
 afterAll(async () => {
@@ -356,7 +357,7 @@ it("generates the two-tier Book Skill and passes the upstream lint gate", async 
   expect(result.manifest.schema_version).toBe(2);
   expect(result.manifest.readany.chapters.map((c) => c.chapterIndex)).toEqual([0, 1, 2]);
   expect(progress[0]).toBe("checking");
-  expect(progress.at(-1)).toBe("completed");
+  expect(progress[progress.length - 1]).toBe("completed");
 
   // The REAL upstream quality gate must accept the generated skill.
   const pythonBin = process.env.TKG_PYTHON || "python";

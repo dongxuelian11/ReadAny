@@ -5,6 +5,7 @@
 // key them by concept+review to make replays idempotent.) The SQLite adapter
 // itself lands with the wiring PR.
 
+import type { PlacementSession, PlacementStore } from "./placement";
 import type {
   ConceptMastery,
   EvidenceEvent,
@@ -27,6 +28,7 @@ export interface InMemoryLearnerStores {
   evidence: LearnerEvidenceStore;
   mastery: LearnerMasteryStore;
   reviews: LearnerReviewStore;
+  placements: PlacementStore;
   /** Test/inspection surface: current ledger rows in insertion order. */
   events(): EvidenceEvent[];
   logs(): LearnerReviewLogEntry[];
@@ -77,12 +79,37 @@ export function createInMemoryLearnerStores(_clock?: LearnerClock): InMemoryLear
     async appendLog(entry) {
       logs.push({ ...entry });
     },
+    async listCardsDueBefore(timestamp, limit) {
+      return [...cards.values()]
+        .filter((card) => card.due <= timestamp)
+        .sort((a, b) => a.due - b.due)
+        .slice(0, limit ?? Number.POSITIVE_INFINITY)
+        .map((card) => ({ ...card }));
+    },
+  };
+
+  const sessions = new Map<string, PlacementSession>();
+  const placements: PlacementStore = {
+    async get(id) {
+      const session = sessions.get(id);
+      return session ? (JSON.parse(JSON.stringify(session)) as PlacementSession) : null;
+    },
+    async put(session) {
+      sessions.set(session.id, JSON.parse(JSON.stringify(session)) as PlacementSession);
+    },
+    async getActive() {
+      const active = [...sessions.values()]
+        .filter((session) => session.status === "active")
+        .sort((a, b) => b.startedAt - a.startedAt)[0];
+      return active ? (JSON.parse(JSON.stringify(active)) as PlacementSession) : null;
+    },
   };
 
   return {
     evidence,
     mastery,
     reviews,
+    placements,
     events: () => events.map((event) => ({ ...event })),
     logs: () => logs.map((entry) => ({ ...entry })),
   };

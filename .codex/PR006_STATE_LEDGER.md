@@ -43,17 +43,22 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 ## Test truth
 
-- Placement module tests: `NOT_RUN` at ledger creation.
+- Placement module tests: `PASS` — 4 new files / 24 tests (`placement.test.ts` CAT port-spec with exact audited-formula values incl. theta branches 0.65/0.35/0.56/0.44, SE clamps, stop rules at exact boundaries 9/6 continue vs 9/7 stop; `placement-engine.test.ts` session lifecycle/supersession/fail-closed answers/stop-rule surfacing/finalize formulas/overwrite guard/answer-only evidence/re-finalize rejection; `placement-generation.test.ts` deterministic layer rotation + retry-once-then-skip; `queries` due-list join). Learner module total: 8 files / 65 tests.
+- Full core suite: `PASS` — 84 files / 651 tests (was 82/637; +2 files / +14 tests).
+- Core package `tsc --noEmit -p tsconfig.json` (run directly for the first time this session): `PASS` after fixing three latent test-file type errors it exposed from earlier PRs (two `.at(-1)` usages predating the tsconfig lib, one closure-narrowing null in the TKG integration beforeAll — no shipped code affected). App `tsc --noEmit`: `PASS` (caught the placement-trigger deps shape missing `placements`). App production Vite build: `PASS` (40.7s).
+- Biome on learner module + app learner adapters: `PASS` (clean).
 - Existing gates (quality / NSIS / Read-Box / TKG): run unchanged; authoritative result on GitHub CI.
-- Real DeepSeek E2E: `NOT_RUN` (generation is exercised against a local deterministic provider in tests; no real key calls).
+- Real DeepSeek E2E: `NOT_RUN` (generation tested against a local deterministic provider; no real key calls).
 
 ## Blockers / partial truth
 
-- None currently.
+- None currently. Deferred by design to PR-007: placement flow UI + mastery/review view (under apple-design / emil-design-eng), prerequisite-edge inference in finalize (no edge model exists yet), per-concept difficulty metadata from the future knowledge graph.
 
-## Next exact action
+## Final handoff snapshot — 2026-08-30 (pre-merge)
 
-Implement placement types + CAT engine + generation + storage + app adapter + tests; full verification; commit, push, PR, CI, independent acceptance, ordinary merge.
+- Implementation complete: `placement.ts` (faithful CAT core + finalize formulas), `placement-generation.ts` (LLM content co-processor + deterministic validation), `placement-engine.ts` (session lifecycle + guarded finalize + answer-only evidence), `queries.ts` (due-review join), PlacementStore in types/in-memory/SQLite, `learner_placement_sessions` table, app `placement-trigger.ts` (Book-Skill-chapter concepts, pool cap 24, unified-gateway generation).
+- deriveMasteryStatus updated honestly: "unseen" now requires no evidence AND no verified estimate; placement rows (lastVerified set) derive learning/stable from mastery.
+- Next exact action: push, wait for exact-head blocking CI, independent acceptance, ordinary merge (no squash/rebase). Post-merge alignment: PR-007 scope (UI: placement flow, mastery/review view, due-review surface — under the UI-skill gate) with the user before code.
 
 ## Recovery protocol
 

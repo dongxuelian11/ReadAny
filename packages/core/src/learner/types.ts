@@ -129,4 +129,6 @@ export interface LearnerReviewStore {
   getCard(conceptId: string): Promise<LearnerReviewCardData | null>;
   putCard(card: LearnerReviewCardData): Promise<void>;
   appendLog(entry: LearnerReviewLogEntry): Promise<void>;
+  /** Cards whose due time is at or before the given epoch millis, ascending by due. */
+  listCardsDueBefore(timestamp: number, limit?: number): Promise<LearnerReviewCardData[]>;
 }
