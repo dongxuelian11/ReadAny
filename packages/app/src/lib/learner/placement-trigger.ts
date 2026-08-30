@@ -10,12 +10,14 @@ import { fallbackContentService } from "@readany/core/ai";
 import { createBookSkillLlmClient } from "@readany/core/book-skill";
 import {
   PLACEMENT_MAX_ITEMS,
+  answerPlacementItem as coreAnswerPlacementItem,
+  finalizePlacement as coreFinalizePlacement,
   createSqliteLearnerStores,
   generatePlacementItems,
   getActivePlacementSession,
   startPlacementSession,
 } from "@readany/core/learner";
-import type { PlacementConcept, PlacementSession } from "@readany/core/learner";
+import type { PlacementConcept, PlacementSession, PlacementVerdict } from "@readany/core/learner";
 import type { Book } from "@readany/core/types";
 
 /** CAT maximum is 20 answered items; keep a small selection buffer. */
@@ -38,7 +40,7 @@ async function placementConcepts(book: Book): Promise<PlacementConcept[]> {
     }));
 }
 
-async function createPlacementEngineDeps() {
+export async function createPlacementEngineDeps() {
   return {
     clock: { now: (): Date => new Date() },
     ...createSqliteLearnerStores(),
@@ -65,4 +67,20 @@ export async function startBookPlacement(book: Book): Promise<PlacementSession> 
 /** The active placement session, if one is in progress. */
 export async function getActivePlacement(): Promise<PlacementSession | null> {
   return getActivePlacementSession(await createPlacementEngineDeps());
+}
+
+/** Apply one answer to a placement session and persist it. */
+export async function answerPlacement(
+  session: PlacementSession,
+  itemId: string,
+  correct: boolean,
+): Promise<PlacementSession> {
+  return coreAnswerPlacementItem(await createPlacementEngineDeps(), session, itemId, correct);
+}
+
+/** Finalize a placement session: guarded mastery writes + answer-only evidence. */
+export async function finalizePlacementSession(
+  session: PlacementSession,
+): Promise<PlacementVerdict> {
+  return coreFinalizePlacement(await createPlacementEngineDeps(), session);
 }

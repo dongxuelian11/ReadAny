@@ -256,5 +256,66 @@
       "ready": "本書技能已就緒",
       "error": "本書技能產生失敗；閱讀仍可繼續"
     }
+  },
+  "learnerPanel": {
+    "title": "學習者",
+    "retry": "重試",
+    "loading": "載入中…",
+    "noAiConfig": "請先在設定中配置可用的 AI 端點",
+    "tabs": {
+      "label": "學習者板塊",
+      "placement": "摸底",
+      "mastery": "掌握度",
+      "review": "複習"
+    },
+    "phase": {
+      "idle": "先測一測你已經會什麼",
+      "starting": "正在編寫診斷題…",
+      "active": "摸底進行中",
+      "finalizing": "正在評分…",
+      "completed": "摸底完成",
+      "error": "摸底失敗；閱讀仍可繼續",
+      "unavailable": "摸底不可用；閱讀仍可繼續"
+    },
+    "placement": {
+      "title": "快速摸底",
+      "idleNote": "一組簡短的自適應問題，測出你對本書各章已經掌握了什麼。如實作答後，後續講解會跳過你已掌握的部分。題目不需要先讀書即可作答。",
+      "start": "開始摸底",
+      "starting": "AI 正在為每章編寫一道診斷題…",
+      "progress": "已答 {{answered}} / 題池 {{pool}} 題",
+      "submit": "提交答案",
+      "correct": "回答正確",
+      "incorrect": "還不對",
+      "continue": "下一題",
+      "finish": "查看結果",
+      "stopReached": "自適應測試已獲得足夠資訊。點擊完成即可評分。",
+      "finalizing": "評分中…"
+    },
+    "verdict": {
+      "ability": "估計能力",
+      "questions": "已答題數",
+      "assessed": "已評估章節",
+      "inferred": "估算",
+      "note": "這些是摸底觀測到的估計值。真實的練習和小測會繼續修正它們——歷史不會被刪除。"
+    },
+    "mastery": {
+      "title": "章節掌握度",
+      "empty": "還沒有掌握數據——先回答章節小測或完成摸底。",
+      "evidence": "{{count}} 條證據",
+      "refresh": "重新整理"
+    },
+    "review": {
+      "title": "到期複習",
+      "empty": "目前沒有到期的複習。",
+      "dueAt": "{{date}} 到期",
+      "refresh": "重新整理"
+    },
+    "status": {
+      "unseen": "未接觸",
+      "learning": "學習中",
+      "stable": "已掌握",
+      "needs_review": "需要複習"
+    },
+    "backToSource": "返回原文"
   }
 }

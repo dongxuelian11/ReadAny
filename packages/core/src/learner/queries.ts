@@ -26,3 +26,16 @@ export async function listDueReviewConcepts(
   }
   return due;
 }
+
+/** Mastery rows for an explicit concept list (order preserved; null for
+ * concepts the learner state knows nothing about). */
+export async function getMasteryForConcepts(
+  deps: PlacementEngineDeps,
+  conceptIds: string[],
+): Promise<Array<{ conceptId: string; mastery: ConceptMastery | null }>> {
+  const rows: Array<{ conceptId: string; mastery: ConceptMastery | null }> = [];
+  for (const conceptId of conceptIds) {
+    rows.push({ conceptId, mastery: await deps.mastery.get(conceptId) });
+  }
+  return rows;
+}
