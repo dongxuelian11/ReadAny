@@ -41,17 +41,20 @@ Last updated: 2026-08-31 (Asia/Shanghai)
 
 ## Test truth
 
-- Cross-book tests: `NOT_RUN` at ledger creation.
+- Cross-book tests: `PASS` — 1 new file / 9 tests (tokenizer latin+CJK bigrams; routing scoring incl. CJK hits and broadcast-on-no-match; chapter selection via own-topic-line hits bounded to 2; per-book prompt citation contract + OUT OF SCOPE protocol; fan-out with refusal drop + synthesis; all-refuse OUT OF SCOPE synthesis; synthesis prompt braid/tension contract; empty-shelf fail-closed). Book-skill module total: 2 test files / 31 tests.
+- Full core suite: `PASS` — 88 files / 684 tests (was 87/675; +1 file / +9 tests).
+- Core tsc: `PASS`. App tsc: `PASS`. App production Vite build: `PASS` (38.3s). Biome: `PASS` (clean).
 - Existing gates (quality / NSIS / Read-Box / TKG): run unchanged; authoritative result on GitHub CI.
-- Real DeepSeek E2E: `NOT_RUN` (routing is pure; fan-out/synthesis tested against deterministic fakes).
+- Real DeepSeek E2E: `NOT_RUN` (routing pure; fan-out/synthesis tested against deterministic fakes).
 
 ## Blockers / partial truth
 
-- None currently. Deferred by design: answer persistence/history, semantic (embedding or LLM) routing, walk/course modes, UI.
+- None currently. Deferred by design: answer persistence/history, semantic (embedding or LLM) routing, walk/course modes, UI (frontend owner).
 
-## Next exact action
+## Final handoff snapshot — 2026-08-31 (pre-merge)
 
-Implement routing + fan-out + synthesis + app shelf trigger + tests; full verification; commit, push, PR, CI, independent acceptance, ordinary merge.
+- Implementation complete: `book-skill/cross-book.ts` (tokenize/route/select/prompt/askAcrossBooks) + tests + app `ask-trigger.ts` (shelf enumeration over the library store, per-book SKILL.md + chapter toolkit reads with skip-on-missing, unified-gateway client).
+- Next exact action: push, wait for exact-head blocking CI, independent acceptance, ordinary merge (no squash/rebase). Post-merge: ask UI belongs to the frontend owner; remaining backend candidates are semantic routing and answer persistence/history.
 
 ## Recovery protocol
 
