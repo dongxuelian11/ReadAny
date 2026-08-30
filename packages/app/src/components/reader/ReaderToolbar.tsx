@@ -13,6 +13,7 @@ import {
   BookMarked,
   Bookmark,
   BrainCircuit,
+  GraduationCap,
   Headphones,
   List,
   Maximize,
@@ -44,6 +45,7 @@ interface ReaderToolbarProps {
   onToggleChat?: () => void;
   onToggleLearning?: () => void;
   onToggleBookSkill?: () => void;
+  onToggleLearnerPanel?: () => void;
   onToggleTTS?: () => void;
   chapterTranslationState: ChapterTranslationState;
   onChapterTranslationStart: (targetLang?: string) => void;
@@ -54,6 +56,7 @@ interface ReaderToolbarProps {
   isChatOpen?: boolean;
   isLearningOpen?: boolean;
   isBookSkillOpen?: boolean;
+  isLearnerPanelOpen?: boolean;
   isTTSActive?: boolean;
   isFixedLayout?: boolean;
   fixedLayoutZoom?: number;
@@ -90,6 +93,7 @@ export function ReaderToolbar({
   isChatOpen,
   isLearningOpen,
   isBookSkillOpen,
+  isLearnerPanelOpen,
   isTTSActive,
   isFixedLayout = false,
   fixedLayoutZoom = 1,
@@ -102,6 +106,7 @@ export function ReaderToolbar({
   onMouseEnter,
   onMouseLeave,
   onToggleBookSkill,
+  onToggleLearnerPanel,
   getPageSnippet,
 }: ReaderToolbarProps) {
   const { t } = useTranslation();
@@ -328,6 +333,16 @@ export function ReaderToolbar({
           aria-pressed={isBookSkillOpen}
         >
           <BookMarked className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={`h-7 w-7 ${isLearnerPanelOpen ? "bg-primary/10 text-primary" : ""}`}
+          onClick={onToggleLearnerPanel}
+          title={t("learnerPanel.title")}
+          aria-pressed={isLearnerPanelOpen}
+        >
+          <GraduationCap className="h-3.5 w-3.5" />
         </Button>
         <Button
           variant="ghost"

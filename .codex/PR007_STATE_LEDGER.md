@@ -44,18 +44,22 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 ## Test truth
 
-- Learner panel-state reducer tests: `NOT_RUN` at ledger creation.
-- Full core suite / Biome / tsc / build: `PENDING` at first write.
-- Visual evidence: `PENDING` — to be attempted against the real app with the deterministic provider; the result (PASS with screenshots or NOT_RUN with reasons) is recorded honestly before merge.
-- Real DeepSeek E2E: `NOT_RUN` (visual/deterministic provider only).
+- Learner panel-state reducer tests: `PASS` — 1 new file / 5 tests (full placement walk, stop-rule completion surface, error/unavailable states, list states, book-change reset semantics). Learner module total: 8 test files / 60 tests.
+- Full core suite: `PASS` — 85 files / 656 tests (was 84/651; +1 file / +5 tests).
+- Biome (learner module + app learner adapters + LearnerPanel): `PASS` (clean). Core tsc: `PASS`. App `tsc --noEmit`: `PASS` (caught missing useCallback import + deps-shape mismatch in overview).
+- Existing gates (quality / NSIS / Read-Box / TKG): run unchanged; authoritative result on GitHub CI.
+- VISUAL EVIDENCE: `NOT_RUN` — honest limitation. The panel states are fully covered by the reducer tests, type checks, and the two applied design skills, but no real-app GUI session was executed in this environment (launching Tauri, importing a book, driving the placement flow against a deterministic provider, and capturing screenshots is a dedicated follow-up step, following the PR-001 visual-evidence pattern in output/playwright + docs/evidence). No visual claim is made beyond the code and tests.
+- Real DeepSeek E2E: `NOT_RUN` (no model calls; placement generation covered by a deterministic fake in tests).
 
 ## Blockers / partial truth
 
-- None currently.
+- Visual evidence NOT_RUN as above — recorded, not hidden. Everything else clear.
 
-## Next exact action
+## Final handoff snapshot — 2026-08-30 (pre-merge)
 
-Implement the core reducer + query, the app panel/triggers/i18n/mount, verify, then record visual evidence truthfully.
+- Implementation complete: `learner/panel-state.ts` (+ tests), `getMasteryForConcepts` in queries, app `overview.ts` (book-scoped mastery/due joins), `placement-trigger.ts` extensions (answer/finalize/exported deps factory), `LearnerPanel.tsx` (three tabs, all phases designed: placement idle/starting/active+judging/stop-reached/finalizing/verdict/error/unavailable; mastery loading/ready/empty/error; review loading/ready/empty/error), ReaderView mount + toolbar toggle (mutually exclusive with Learning/BookSkill/Chat), `learnerPanel` i18n in en/zh/zh-TW.
+- Placement resume: an active session belonging to the current book is resumed on panel open; foreign-book sessions are ignored.
+- Next exact action: push, wait for exact-head blocking CI, independent acceptance, ordinary merge (no squash/rebase). Post-merge follow-ups: visual evidence session (GUI), PR-008 candidates (Goal Model / Curriculum per Wave 2, or cross-book routing per Track B).
 
 ## Recovery protocol
 

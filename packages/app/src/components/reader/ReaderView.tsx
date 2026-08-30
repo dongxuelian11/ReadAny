@@ -1,5 +1,6 @@
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { BookSkillPanel } from "@/components/reader/BookSkillPanel";
+import { LearnerPanel } from "@/components/reader/LearnerPanel";
 import { LearningPanel } from "@/components/reader/LearningPanel";
 /**
  * ReaderView — main reader page component.
@@ -803,6 +804,7 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
   const [showChat, setShowChat] = useState(false);
   const [showLearning, setShowLearning] = useState(false);
   const [showBookSkill, setShowBookSkill] = useState(false);
+  const [showLearnerPanel, setShowLearnerPanel] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showTTS, setShowTTS] = useState(false);
   const [isReimporting, setIsReimporting] = useState(false);
@@ -832,6 +834,12 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
   });
   const bookSkillPanel = useResizablePanel({
     storageKey: "reader-book-skill-panel-width",
+    defaultWidth: 360,
+    minWidth: 300,
+    maxWidth: 560,
+  });
+  const learnerPanelWidths = useResizablePanel({
+    storageKey: "reader-learner-panel-width",
     defaultWidth: 360,
     minWidth: 300,
     maxWidth: 560,
@@ -1860,7 +1868,11 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
   const handleToggleToc = useCallback(() => setShowToc((p) => !p), []);
   const handleToggleChat = useCallback(() => {
     setShowChat((open) => {
-      if (!open) setShowLearning(false);
+      if (!open) {
+        setShowLearning(false);
+        setShowBookSkill(false);
+        setShowLearnerPanel(false);
+      }
       return !open;
     });
   }, []);
@@ -1869,6 +1881,7 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
       if (!open) {
         setShowChat(false);
         setShowBookSkill(false);
+        setShowLearnerPanel(false);
       }
       return !open;
     });
@@ -1878,6 +1891,17 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
       if (!open) {
         setShowChat(false);
         setShowLearning(false);
+        setShowLearnerPanel(false);
+      }
+      return !open;
+    });
+  }, []);
+  const handleToggleLearnerPanel = useCallback(() => {
+    setShowLearnerPanel((open) => {
+      if (!open) {
+        setShowChat(false);
+        setShowLearning(false);
+        setShowBookSkill(false);
       }
       return !open;
     });
@@ -3130,6 +3154,7 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
             onToggleChat={handleToggleChat}
             onToggleLearning={handleToggleLearning}
             onToggleBookSkill={handleToggleBookSkill}
+            onToggleLearnerPanel={handleToggleLearnerPanel}
             onToggleTTS={handleToggleTTS}
             chapterTranslationState={chapterTranslation.state}
             onChapterTranslationStart={chapterTranslation.startTranslation}
@@ -3140,6 +3165,7 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
             isChatOpen={showChat}
             isLearningOpen={showLearning}
             isBookSkillOpen={showBookSkill}
+            isLearnerPanelOpen={showLearnerPanel}
             isTTSActive={showTTS || ttsPlayState !== "stopped"}
             isFixedLayout={isFixedLayout}
             fixedLayoutZoom={fixedLayoutZoom}
@@ -3298,6 +3324,34 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
             </button>
           </div>
           <BookSkillPanel book={book} onNavigateToChapter={handleNavigateToBookSkillChapter} />
+        </aside>
+      )}
+
+      {/* Learner — placement / mastery / review, quiet Reader-side auxiliary layer, resizable */}
+      {showLearnerPanel && book && (
+        <aside
+          className="relative ml-1 flex shrink-0 flex-col overflow-hidden rounded-lg border border-border/60 bg-background shadow-sm"
+          style={{ width: learnerPanelWidths.width }}
+          aria-label={t("learnerPanel.title")}
+        >
+          <ResizeHandle
+            side="left"
+            onResizeStart={learnerPanelWidths.handleResizeStart}
+            onResize={(delta) => learnerPanelWidths.handleResize(delta, "left")}
+            onResizeEnd={learnerPanelWidths.handleResizeEnd}
+          />
+          <div className="flex h-10 shrink-0 items-center justify-between border-b border-border/40 px-3">
+            <span className="text-xs font-medium text-foreground">{t("learnerPanel.title")}</span>
+            <button
+              type="button"
+              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => setShowLearnerPanel(false)}
+              aria-label={t("common.close")}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <LearnerPanel book={book} onNavigateToChapter={handleNavigateToBookSkillChapter} />
         </aside>
       )}
 

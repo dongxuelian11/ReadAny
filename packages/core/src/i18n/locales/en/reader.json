@@ -260,5 +260,66 @@
       "ready": "Book Skill ready",
       "error": "Book Skill generation failed; reading remains available"
     }
+  },
+  "learnerPanel": {
+    "title": "Learner",
+    "retry": "Try again",
+    "loading": "Loading…",
+    "noAiConfig": "Configure an active AI endpoint in Settings first",
+    "tabs": {
+      "label": "Learner sections",
+      "placement": "Placement",
+      "mastery": "Mastery",
+      "review": "Review"
+    },
+    "phase": {
+      "idle": "Measure what you already know",
+      "starting": "Writing diagnostic questions…",
+      "active": "Placement in progress",
+      "finalizing": "Scoring the placement…",
+      "completed": "Placement complete",
+      "error": "Placement failed; reading remains available",
+      "unavailable": "Placement unavailable; reading remains available"
+    },
+    "placement": {
+      "title": "Quick placement",
+      "idleNote": "A short adaptive set of questions measures what you already know about this book's chapters. Answered honestly, later explanations skip what you have mastered. The questions are answerable without reading the book.",
+      "start": "Start placement",
+      "starting": "The AI is writing one diagnostic question per chapter…",
+      "progress": "Answered {{answered}} of a {{pool}}-question pool",
+      "submit": "Submit answer",
+      "correct": "Correct",
+      "incorrect": "Not quite",
+      "continue": "Next question",
+      "finish": "See results",
+      "stopReached": "The adaptive test has enough information. Finish to score your placement.",
+      "finalizing": "Scoring…"
+    },
+    "verdict": {
+      "ability": "Estimated ability",
+      "questions": "Questions answered",
+      "assessed": "Chapters assessed",
+      "inferred": "estimated",
+      "note": "These estimates describe what the placement observed. Real practice and quizzes refine them — history is never deleted."
+    },
+    "mastery": {
+      "title": "Chapter mastery",
+      "empty": "No mastery data yet — answer a chapter quiz or run the placement.",
+      "evidence": "{{count}} evidence",
+      "refresh": "Refresh"
+    },
+    "review": {
+      "title": "Due reviews",
+      "empty": "Nothing is due right now.",
+      "dueAt": "Due {{date}}",
+      "refresh": "Refresh"
+    },
+    "status": {
+      "unseen": "not seen",
+      "learning": "learning",
+      "stable": "mastered",
+      "needs_review": "needs review"
+    },
+    "backToSource": "Back to original text"
   }
 }
