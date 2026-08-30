@@ -41,14 +41,16 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 ## Test truth
 
-- Product code changes: NONE planned; existing gates (quality / NSIS / Read-Box integration / TKG integration) expected to pass unchanged on the pushed head.
-- Deep audits: `NOT_RUN` at ledger creation; results recorded in this ledger as they complete.
+- Product code changes: NONE. Existing gates (quality / NSIS / Read-Box integration / TKG integration) run unchanged on the pushed head and are expected to pass.
+- Deep audits: `COMPLETE` (2026-08-30) — three parallel source-level audit passes over the five pinned clones (OpenTutor + SkillCoco; pyBKT + ts-fsrs; LearnGraph) plus quick-passes over gen-mentor / OpenMAIC / rsml-tutor / learn-almost-anything via live GitHub API and raw file reads.
+- Decision document: `COMPLETE` — `docs/integrations/LEARNER_CORE_OSS_AUDIT_PR003.md` records per-component verdicts: Evidence ADOPT_DESIGN (OpenTutor taxonomy + SkillCoco ledger); BKT Mastery PORT_ALGORITHM (2-state forward filter, ~50 lines TS; OpenTutor question-type parameterization; SkillCoco orchestration invariants) with optional pinned pyBKT offline-fitting sidecar; Retention REUSE_AS_DEPENDENCY (`ts-fsrs@5.4.1` exact pin, MIT, zero runtime deps, the single new dependency Track D needs); Misconceptions ADOPT_DESIGN (OpenTutor confusion-pair + diagnostic-twin loops, LearnGraph entity shape); Transfer BUILD_FRESH (thin); Placement ADOPT_DESIGN + rewrite estimator (OpenTutor CAT pretest); Wave-2 Goal→Curriculum ADOPT_DESIGN (gen-mentor pipeline + SkillCoco pack format + LearnGraph taxonomy).
+- License hazards recorded: LearnGraph and learn-almost-anything are UNLICENSED (no code copying, design concepts only); rsml/tutor is GPL-3.0 (reference-only posture despite family compatibility).
 - Real DeepSeek E2E: `NOT_RUN` (no model calls in this PR).
+- CI on the pushed head: `PENDING` at ledger update; authoritative result on GitHub.
 
 ## Blockers / partial truth
 
-- LearnGraph and learn-almost-anything have no license file — recorded as reference-only regardless of audit content.
-- rsml/tutor is GPL-3.0; the ReadAny fork is GPL-3.0-or-later so license-compatible in principle, but the default posture stays reference-first (decision recorded in the audit doc).
+- None. Implementation of the Learner Authority is a LATER PR gated on this document; no code, no dependencies, and no schemas change here.
 
 ## Next exact action
 
