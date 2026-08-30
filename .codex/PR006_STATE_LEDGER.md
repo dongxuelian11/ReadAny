@@ -39,12 +39,13 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 - Base: `origin/main` `93e26f91f5ccae8075907a2481115488a653bd27`.
 - Branch `feat/pr006-placement-cat` created normally from that exact base; initial HEAD `93e26f91f5ccae8075907a2481115488a653bd27`.
-- Product PR: `NOT_CREATED`.
+- Product PR: https://github.com/dongxuelian11/ReadAny/pull/7 (created 2026-08-30, base `origin/main` `93e26f91f5ccae8075907a2481115488a653bd27`).
 
 ## Test truth
 
-- Placement module tests: `PASS` — 4 new files / 24 tests (`placement.test.ts` CAT port-spec with exact audited-formula values incl. theta branches 0.65/0.35/0.56/0.44, SE clamps, stop rules at exact boundaries 9/6 continue vs 9/7 stop; `placement-engine.test.ts` session lifecycle/supersession/fail-closed answers/stop-rule surfacing/finalize formulas/overwrite guard/answer-only evidence/re-finalize rejection; `placement-generation.test.ts` deterministic layer rotation + retry-once-then-skip; `queries` due-list join). Learner module total: 8 files / 65 tests.
-- Full core suite: `PASS` — 84 files / 651 tests (was 82/637; +2 files / +14 tests).
+- Placement module tests: `PASS` — 2 new test files / 14 new tests (`placement.test.ts`: CAT port-spec with exact audited-formula values incl. theta branches 0.65/0.35/0.56/0.44, SE clamps, stop rules at exact boundaries 9/6 continue vs 9/7 stop; `placement-engine.test.ts`: session lifecycle/supersession/fail-closed answers/stop-rule surfacing/finalize formulas/overwrite guard/answer-only evidence/re-finalize rejection, plus generation layer rotation + retry-once-then-skip and the due-list join — generation and queries coverage lives inside this file, there is no separate placement-generation.test.ts). Learner module total: 7 test files / 55 tests.
+- Full core suite: `PASS` — 84 files / 651 tests (was 82/637; +2 files / +14 tests — consistent with the line above).
+- CORRECTION (2026-08-30, independent acceptance): an earlier version of this line claimed "4 new files / 24 tests" and named a nonexistent placement-generation.test.ts. The correct counts are as stated above; the error was a ledger-authoring slip caught by acceptance review and fixed here per the fail-closed reconciliation protocol.
 - Core package `tsc --noEmit -p tsconfig.json` (run directly for the first time this session): `PASS` after fixing three latent test-file type errors it exposed from earlier PRs (two `.at(-1)` usages predating the tsconfig lib, one closure-narrowing null in the TKG integration beforeAll — no shipped code affected). App `tsc --noEmit`: `PASS` (caught the placement-trigger deps shape missing `placements`). App production Vite build: `PASS` (40.7s).
 - Biome on learner module + app learner adapters: `PASS` (clean).
 - Existing gates (quality / NSIS / Read-Box / TKG): run unchanged; authoritative result on GitHub CI.
@@ -58,7 +59,9 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 - Implementation complete: `placement.ts` (faithful CAT core + finalize formulas), `placement-generation.ts` (LLM content co-processor + deterministic validation), `placement-engine.ts` (session lifecycle + guarded finalize + answer-only evidence), `queries.ts` (due-review join), PlacementStore in types/in-memory/SQLite, `learner_placement_sessions` table, app `placement-trigger.ts` (Book-Skill-chapter concepts, pool cap 24, unified-gateway generation).
 - deriveMasteryStatus updated honestly: "unseen" now requires no evidence AND no verified estimate; placement rows (lastVerified set) derive learning/stable from mastery.
-- Next exact action: push, wait for exact-head blocking CI, independent acceptance, ordinary merge (no squash/rebase). Post-merge alignment: PR-007 scope (UI: placement flow, mastery/review view, due-review surface — under the UI-skill gate) with the user before code.
+- PASS — CI on the exact head `014d1b18` (run 33305808500): blocking quality PASS (3m48s, 84 files / 651 tests), blocking Windows NSIS PASS (12m4s), blocking pinned Read-Box integration PASS (36s), blocking pinned TKG integration PASS (3m22s). Non-gating baseline-debt FAILs as documented debt.
+- Independent acceptance review (2026-08-30): port fidelity verified line-by-line against the pinned cat_pretest.py with zero semantic deviations; 6/7 criteria PASS outright, criterion 6 (truth discipline) FAILED on the ledger's inflated test counts — corrected above per fail-closed. Non-blocking notes recorded for PR-007: placement-row confidence semantic (1/0 vs the engine's /15 saturation), stale evidenceCount on guarded concepts until the next real evidence event, pool-scope finalize (cap 24) vs all-course-concepts, no duplicate-conceptId guard in start (generation enforces 1:1 by construction), Math.random in one test helper.
+- Next exact action: push this correction, wait for exact-head blocking CI on the new head, then ordinary merge PR #7 (no squash/rebase). Post-merge alignment: PR-007 scope (placement flow UI, mastery/review view, due-review surface — under the UI-skill gate) with the user before code.
 
 ## Recovery protocol
 
