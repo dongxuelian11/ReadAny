@@ -81,11 +81,12 @@
     {
       "repo": "open-spaced-repetition/ts-fsrs",
       "role": "FSRS-6 scheduling implementation for review/retention",
-      "integration_intent": "PR-003 audit verdict: REUSE_AS_DEPENDENCY — the only new dependency the Track D implementation needs; exact version pin at adoption, enable_fuzz disabled for deterministic Authority, no storage schemas on deprecated fields pending v6.",
-      "status": "AUDITED",
+      "integration_intent": "PR-003 audit verdict: REUSE_AS_DEPENDENCY. PR-004 adopted it as the deterministic Authority scheduler: enable_fuzz disabled, day-granularity (enable_short_term false), storage via epoch-millis serialization that excludes the deprecated elapsed_days/last_elapsed_days fields pending v6.",
+      "status": "ADOPTED",
       "exact_ref": "1303836d36f2c4e3a8a01a44edfee5c89147a990",
+      "adopted_version": "5.4.1 (exact pin in packages/core dependencies)",
       "license": "MIT (root + packages/fsrs LICENSE verified at pinned ref)",
-      "integration_mode": "REFERENCE"
+      "integration_mode": "DEPENDENCY"
     },
     {
       "repo": "GeminiLight/gen-mentor",

@@ -59,6 +59,8 @@
     "./feedback/*": "./src/feedback/*.ts",
     "./learning": "./src/learning/index.ts",
     "./learning/*": "./src/learning/*.ts",
+    "./learner": "./src/learner/index.ts",
+    "./learner/*": "./src/learner/*.ts",
     "./book-skill": "./src/book-skill/index.ts",
     "./book-skill/*": "./src/book-skill/*.ts"
   },
@@ -71,6 +73,7 @@
     "pdfjs-dist": "^5.5.207",
     "react-i18next": "^16.5.4",
     "tailwind-merge": "^3.0.0",
+    "ts-fsrs": "5.4.1",
     "zod": "^4.3.6",
     "zustand": "^5.0.5"
   },

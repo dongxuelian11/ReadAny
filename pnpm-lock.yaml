@@ -562,6 +562,9 @@ importers:
       tailwind-merge:
         specifier: ^3.0.0
         version: 3.5.0
+      ts-fsrs:
+        specifier: 5.4.1
+        version: 5.4.1
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -8767,6 +8770,10 @@ packages:
     resolution: {integrity: sha512-2qxI/FZVDPbzh63GwWIZYE7daWKtwXZYuyc8YNq0iTmMUwn4mL0jRLsp6hfFlgbdRSR4x2ppe+E86FnvEpN7Nw==}
     engines: {node: '>=14.13.1'}
 
+  ts-fsrs@5.4.1:
+    resolution: {integrity: sha512-mOp9+oexJexBTkwjg/jQI1aSUQRLIAvbimeKHLSmVdNJPwObugFNKmZkoggH5d6kZ0uaWLboP1Al1DnXAfIb9w==}
+    engines: {node: '>=20.0.0'}
+
   ts-interface-checker@0.1.13:
     resolution: {integrity: sha512-Y/arvbn+rrz3JCKl9C4kVNfTfSm2/mEp5FSz5EsZSANGPSlQrpRI5M4PKF+mJnE52jOO90PnPSc3Ur3bTQw0gA==}
 
@@ -8787,6 +8794,7 @@ packages:
   tsconfck@3.1.6:
     resolution: {integrity: sha512-ks6Vjr/jEw0P1gmOVwutM3B7fWxoWBL2KRDb1JfqGVawBmO5UsvmWOQFGHBPl5yxYz4eERr19E6L7NMv+Fej4w==}
     engines: {node: ^18 || >=20}
+    deprecated: unmaintained
     hasBin: true
     peerDependencies:
       typescript: ^5.0.0
@@ -19663,6 +19671,8 @@ snapshots:
   ts-algebra@2.0.0: {}
 
   ts-deepmerge@6.2.0: {}
+
+  ts-fsrs@5.4.1: {}
 
   ts-interface-checker@0.1.13: {}
 
