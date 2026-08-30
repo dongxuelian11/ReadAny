@@ -37,7 +37,7 @@ Last updated: 2026-08-31 (Asia/Shanghai)
 - Base: `origin/main` `c1152a0ced59cec0ad692a05dcf310da3673a155`.
 - Branch `feat/pr010-cross-book-ask` created normally from that exact base; initial HEAD `c1152a0ced59cec0ad692a05dcf310da3673a155`.
 - Incident recorded: the PR-008 ledger was accidentally overwritten in the working tree by a careless node string-patch while recording PR-009's snapshot; caught immediately by `git status` during the branch checkout and restored from main before any commit. No harm shipped.
-- Product PR: `NOT_CREATED`.
+- Product PR: https://github.com/dongxuelian11/ReadAny/pull/11 (created 2026-08-31, base origin/main c1152a0c).
 
 ## Test truth
 
@@ -53,9 +53,6 @@ Last updated: 2026-08-31 (Asia/Shanghai)
 
 ## Final handoff snapshot — 2026-08-31 (pre-merge)
 
-- Implementation complete: `book-skill/cross-book.ts` (tokenize/route/select/prompt/askAcrossBooks) + tests + app `ask-trigger.ts` (shelf enumeration over the library store, per-book SKILL.md + chapter toolkit reads with skip-on-missing, unified-gateway client).
-- Next exact action: push, wait for exact-head blocking CI, independent acceptance, ordinary merge (no squash/rebase). Post-merge: ask UI belongs to the frontend owner; remaining backend candidates are semantic routing and answer persistence/history.
-
-## Recovery protocol
-
-After compaction/restart: reread the authoritative handoff, this ledger, and `docs/integrations/THE_KNOWLEDGE_GUY_PR002.md`; inspect git status/branch/HEAD/remotes; reconcile with GitHub PR/CI state; fail closed on disagreement. Never infer a PASS or COMPLETE state from missing context.
+- Implementation complete and CI green: exact head 07f7aaa9 (run 33325932110) — blocking quality PASS (3m46s, 88 files / 684 tests), blocking Windows NSIS PASS (14m27s), blocking pinned Read-Box integration PASS (39s), blocking pinned TKG integration PASS (2m22s). Non-gating baseline-debt FAILs as documented debt.
+- PASS — independent acceptance review (2026-08-31): 7/7 criteria PASS, 0 blocking; TKG fidelity verified letter-by-letter against the pinned upstream SKILL.md (broadcast-on-no-match, parallel fan-out, OUT OF SCOPE protocol, braid-not-stack, tensions surfaced); the PR-008 ledger overwrite incident verified fully restored (identical blob at base and head). Non-blocking notes carried forward: (1) refusal detection is exact trimmed equality — startsWith hardening candidate; (2) routing vocabulary includes the Topic Index beyond upstream frontmatter-only — disclosed adaptation, deterministic code router; (3) one failed per-book LLM call rejects the whole ask (fail-closed; resilience list is a future hardening); (4) ledger PR-number staleness inherent to pre-merge snapshots.
+- Next exact action: push this housekeeping commit, wait for exact-head blocking CI on the new head, then ordinary merge PR #11 (no squash/rebase). Post-merge: ask UI belongs to the frontend owner; remaining backend candidates are semantic routing, answer persistence/history, and the concept graph for prerequisite-aware reordering.
