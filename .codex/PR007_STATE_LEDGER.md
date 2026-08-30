@@ -40,7 +40,7 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 - Base: `origin/main` `62fa349197574eaafbbeffb296d1e2d8cafef636`.
 - Branch `feat/pr007-learner-panel` created normally from that exact base; initial HEAD `62fa349197574eaafbbeffb296d1e2d8cafef636`.
-- Product PR: `NOT_CREATED`.
+- Product PR: https://github.com/dongxuelian11/ReadAny/pull/8 (created 2026-08-30, base origin/main 62fa3491).
 
 ## Test truth
 
@@ -57,10 +57,7 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 ## Final handoff snapshot — 2026-08-30 (pre-merge)
 
-- Implementation complete: `learner/panel-state.ts` (+ tests), `getMasteryForConcepts` in queries, app `overview.ts` (book-scoped mastery/due joins), `placement-trigger.ts` extensions (answer/finalize/exported deps factory), `LearnerPanel.tsx` (three tabs, all phases designed: placement idle/starting/active+judging/stop-reached/finalizing/verdict/error/unavailable; mastery loading/ready/empty/error; review loading/ready/empty/error), ReaderView mount + toolbar toggle (mutually exclusive with Learning/BookSkill/Chat), `learnerPanel` i18n in en/zh/zh-TW.
-- Placement resume: an active session belonging to the current book is resumed on panel open; foreign-book sessions are ignored.
-- Next exact action: push, wait for exact-head blocking CI, independent acceptance, ordinary merge (no squash/rebase). Post-merge follow-ups: visual evidence session (GUI), PR-008 candidates (Goal Model / Curriculum per Wave 2, or cross-book routing per Track B).
-
-## Recovery protocol
-
-After compaction/restart: reread the authoritative handoff, this ledger, `docs/UI_UX_GOVERNANCE.md`, and the two project UI skills; inspect git status/branch/HEAD/remotes; reconcile with GitHub PR/CI state; fail closed on disagreement. Never infer a PASS or COMPLETE state from missing context.
+- Implementation complete and CI green: exact head 43c587e3 (run 33310066190) — blocking quality PASS (3m29s, 85 files / 656 tests), blocking Windows NSIS PASS (14m9s), blocking pinned Read-Box integration PASS (36s), blocking pinned TKG integration PASS (2m54s). Non-gating baseline-debt FAILs as documented debt.
+- PASS — independent acceptance review (2026-08-30): 7/7 criteria PASS, 0 blocking, 5 non-blocking notes recorded below. i18n key trees verified identical across en/zh/zh-TW (45 leaf keys); all 35 static learnerPanel key references verified present; LearningPanel/BookSkillPanel/engine files verified untouched.
+- Known non-blocking notes carried forward: (1) handleToggleChat now also closes Book Skill — a user-visible change to the previous Chat/BookSkill coexistence, made under the declared four-way mutual-exclusivity design; (2) the stop-rule reducer test exercises pool exhaustion rather than the SE branch (the SE/max-items branches are covered by PR-006 engine tests; the reducer delegates without bypassing); (3) a single-tick double-submit race on answer drops to the designed engine-fail-closed error state; (4) resume requires ALL session items to belong to the current book (conservative; mixed-book sessions never resume); (5) VISUAL_EVIDENCE = NOT_RUN stands as the PR-007 open follow-up.
+- Next exact action: push this housekeeping commit, wait for exact-head blocking CI on the new head, then ordinary merge PR #8 (no squash/rebase). Post-merge follow-ups: the visual-evidence GUI session; PR-008 candidates (Goal Model / Curriculum per Wave 2, or cross-book routing per Track B).
