@@ -35,7 +35,7 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 - Base: `origin/main` `b92281125049764747f2f9e4d52e44af0c28f181`.
 - Branch `feat/pr005-learner-persistence` created normally from that exact base; initial HEAD `b92281125049764747f2f9e4d52e44af0c28f181`.
-- Product PR: `NOT_CREATED`.
+- Product PR: https://github.com/dongxuelian11/ReadAny/pull/6 (created 2026-08-30, base `origin/main` `b92281125049764747f2f9e4d52e44af0c28f181`).
 
 ## Test truth
 
