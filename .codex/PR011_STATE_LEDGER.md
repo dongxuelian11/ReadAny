@@ -36,17 +36,21 @@ Last updated: 2026-08-31 (Asia/Shanghai)
 
 ## Test truth
 
-- Semantic routing tests: `NOT_RUN` at ledger creation.
+- Semantic routing tests: `PASS` — 1 new file / 7 tests (LLM happy path with call-count verification; invented slug drop; parse-failure→keyword fallback; zero-surviving→keyword matched; zero-surviving+zero-keyword→broadcast; backwards compatibility without flag; frontmatter-only prompt body exposure). Book-skill module total: 4 test files / 45 tests.
+- Full core suite: `PASS` — 89 files / 691 tests (was 88/684; +1 file / +7 tests).
+- Core tsc: `PASS`. Biome: `PASS` (clean).
 - Existing gates: run unchanged; authoritative result on GitHub CI.
 - Real DeepSeek E2E: `NOT_RUN` (deterministic fake only).
+- BUG found and fixed during this slice: `parseJsonResponse` only extracts `{…}` objects — the routing reply is a JSON ARRAY `["slug1","slug2"]`, so `extractBalancedJsonObject` returned null and every parse failed silently. Fixed by replacing `parseJsonResponse` with direct `JSON.parse` (we control the format).
 
 ## Blockers / partial truth
 
 - None currently.
 
-## Next exact action
+## Final handoff snapshot — 2026-08-31 (pre-merge)
 
-Implement routeSkillsSemantic + askAcrossBooks integration + tests; full verification; commit, push, PR, CI, independent acceptance, ordinary merge.
+- Implementation complete: `book-skill/semantic-routing.ts` (buildSemanticRoutingPrompt + routeSkillsSemantic), `askAcrossBooks` integration via optional `semanticRouting?: boolean`, additive exports. Existing keyword router (`routeSkills`) unchanged as fallback.
+- Next exact action: push, wait for exact-head blocking CI, independent acceptance, ordinary merge (no squash/rebase). Post-merge: remaining backend candidates are answer persistence/history and the concept graph for prerequisite-aware reordering.
 
 ## Recovery protocol
 
