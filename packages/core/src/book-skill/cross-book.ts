@@ -8,6 +8,7 @@
 // exceed what the grounded reports support.
 
 import type { GoalLlmClient } from "../learner/goal-parse";
+import { routeSkillsSemantic } from "./semantic-routing";
 
 export interface InstalledBookSkill {
   bookId: string;
@@ -173,16 +174,27 @@ export interface AskAcrossBooksOptions {
   skills: InstalledBookSkill[];
   question: string;
   llm: GoalLlmClient;
+  /** When true, ONE LLM call routes via frontmatter (upstream TKG behaviour);
+   * falls back to the deterministic keyword router on parse failure or zero
+   * surviving slugs. Default false = keyword-only routing. */
+  semanticRouting?: boolean;
 }
 
 const OUT_OF_SCOPE = "OUT OF SCOPE";
 
-/** Route, fan out (parallel), drop refusals, and synthesize. */
+/** Route (semantic or keyword), fan out (parallel), drop refusals, and synthesize. */
 export async function askAcrossBooks(options: AskAcrossBooksOptions): Promise<CrossBookAnswer> {
   if (options.skills.length === 0) {
     throw new Error("Cross-book ask requires at least one installed Book Skill");
   }
-  const { matched, broadcast } = routeSkills(options.skills, options.question);
+  let { matched, broadcast } = options.semanticRouting
+    ? await routeSkillsSemantic(options.skills, options.question, options.llm)
+    : routeSkills(options.skills, options.question);
+  if (matched.length === 0) {
+    // Semantic routing returned nothing relevant → broadcast (TKG no-match).
+    matched = [...options.skills];
+    broadcast = true;
+  }
 
   const reports = await Promise.all(
     matched.map(async (skill) => {

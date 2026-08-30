@@ -9,3 +9,4 @@ export * from "./pipeline";
 export * from "./panel-state";
 export * from "./llm";
 export * from "./cross-book";
+export * from "./semantic-routing";
