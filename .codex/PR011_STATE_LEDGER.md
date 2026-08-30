@@ -32,7 +32,7 @@ Last updated: 2026-08-31 (Asia/Shanghai)
 
 - Base: `origin/main` `e17938610c4826327826a6b567c135f27ac95465`.
 - Branch `feat/pr011-semantic-routing` created normally from that exact base; initial HEAD `e17938610c4826327826a6b567c135f27ac95465`.
-- Product PR: `NOT_CREATED`.
+- Product PR: https://github.com/dongxuelian11/ReadAny/pull/12 (created 2026-08-31, base origin/main e1793861).
 
 ## Test truth
 
@@ -49,9 +49,6 @@ Last updated: 2026-08-31 (Asia/Shanghai)
 
 ## Final handoff snapshot — 2026-08-31 (pre-merge)
 
-- Implementation complete: `book-skill/semantic-routing.ts` (buildSemanticRoutingPrompt + routeSkillsSemantic), `askAcrossBooks` integration via optional `semanticRouting?: boolean`, additive exports. Existing keyword router (`routeSkills`) unchanged as fallback.
-- Next exact action: push, wait for exact-head blocking CI, independent acceptance, ordinary merge (no squash/rebase). Post-merge: remaining backend candidates are answer persistence/history and the concept graph for prerequisite-aware reordering.
-
-## Recovery protocol
-
-After compaction/restart: reread the authoritative handoff, this ledger, and the cross-book module; inspect git status/branch/HEAD/remotes; reconcile with GitHub PR/CI state; fail closed on disagreement. Never infer a PASS or COMPLETE state from missing context.
+- Implementation complete and CI green: exact head a3204723 (run 33330473011) — blocking quality PASS (2m50s, 89 files / 691 tests), blocking Windows NSIS PASS (14m15s), blocking pinned Read-Box integration PASS (34s), blocking pinned TKG integration PASS (2m38s). Non-gating baseline-debt FAILs as documented debt.
+- PASS — independent acceptance review (2026-08-31): 7/7 criteria PASS, 0 blocking; the parseJsonResponse→JSON.parse bug fix independently verified against response.ts source (extractBalancedJsonObject starts at indexOf("{") → null for bare arrays). One ledger miscount corrected above. Non-blocking notes carried forward: (1) parse-failure wording slightly overbroad (fenced arrays would have parsed via the fenced path — bare arrays are the common case and the fix is necessary); (2) dedup/non-array-reply lack dedicated tests (correct by code reading, not required by scope).
+- Next exact action: push this housekeeping commit, wait for exact-head blocking CI on the new head, then ordinary merge PR #12 (no squash/rebase). Post-merge: remaining backend candidates are answer persistence/history, the concept graph for prerequisite-aware reordering, and curriculum execution strategies.
