@@ -38,7 +38,7 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 - Base: `origin/main` `34f9596035cbab5518217d65d4e17b7a78fc01da`.
 - Branch `feat/pr009-teaching-engine` created normally from that exact base; initial HEAD `34f9596035cbab5518217d65d4e17b7a78fc01da`.
-- Product PR: `NOT_CREATED`.
+- Product PR: https://github.com/dongxuelian11/ReadAny/pull/10 (created 2026-08-30, base origin/main 34f95960).
 
 ## Test truth
 
@@ -54,10 +54,6 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 ## Final handoff snapshot — 2026-08-30 (pre-merge)
 
-- Implementation complete: `teaching.ts` (prompt/validation/evidence mapping), `teaching-engine.ts` (session lifecycle: start with supersession, idempotent delivery, deterministic grading through applyEvidenceEvent, fail-closed guards), `teaching-store.ts` (interface), in-memory + SQLite adapters, `learner_teaching_sessions` table, EvidenceSource extended with "TEACHING", app `teaching-trigger.ts` (canonical chapter text via fallback extraction, unified-gateway client).
-- Incidents during this slice, recorded honestly: a careless node-string patch cross-wired the in-memory placement/teaching getActive implementations (caught immediately by placement-engine.test — the deterministic test layer did its job); fixed by hand-repairing stores.ts. One missing `teachings` field in the createSqliteLearnerStores factory was caught by app tsc.
-- Next exact action: push, wait for exact-head blocking CI, independent acceptance, ordinary merge (no squash/rebase). Post-merge: teaching UI belongs to the frontend owner; remaining backend candidates are cross-book routing (Track B continuation) and multi-book goals once a concept graph exists.
-
-## Recovery protocol
-
-After compaction/restart: reread the authoritative handoff, this ledger, and the PR-003 audit doc; inspect git status/branch/HEAD/remotes; reconcile with GitHub PR/CI state; fail closed on disagreement. Never infer a PASS or COMPLETE state from missing context.
+- Implementation complete and CI green: exact head 2a4a8295 (run 33316716151) — blocking quality PASS (3m30s, 87 files / 675 tests), blocking Windows NSIS PASS (14m6s), blocking pinned Read-Box integration PASS (35s), blocking pinned TKG integration PASS (2m55s). Non-gating baseline-debt FAILs as documented debt.
+- PASS — independent acceptance review (2026-08-30): 7/7 criteria PASS, 0 blocking; both disclosed incidents verified fully fixed (cross-wired getActive implementations; missing factory field). One ledger miscount corrected above (learner totals 10 files / 79 tests, not 11/86). Non-blocking notes carried forward: teaching supersession is global-latest-active (stricter than the per-book doc phrasing — fail-safe direction); getActiveTeaching casts deps (core only reads teachings); deterministic evidence ids make a partial-failure retry hit DuplicateEvidenceIdError (intentional fail-closed).
+- Next exact action: push this housekeeping commit, wait for exact-head blocking CI on the new head, then ordinary merge PR #10 (no squash/rebase). Post-merge: teaching UI belongs to the frontend owner; remaining backend candidates are cross-book routing (Track B continuation) and multi-book goals once a concept graph exists.
