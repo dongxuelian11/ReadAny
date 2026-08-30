@@ -34,7 +34,11 @@ export function createLearnerScheduler(options: LearnerSchedulerOptions = {}): F
     throw new Error("Request retention must be strictly inside (0, 1)");
   }
   return fsrs(
-    generatorParameters({ enable_fuzz: false, enable_short_term: false, requestRetention }),
+    generatorParameters({
+      enable_fuzz: false,
+      enable_short_term: false,
+      request_retention: requestRetention,
+    }),
   );
 }
 
