@@ -48,17 +48,22 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 ## Test truth
 
-- Learner core unit tests: `NOT_RUN` at ledger creation.
-- Existing gates (quality / NSIS / Read-Box / TKG integration): expected to run unchanged; core suite will grow with the new learner tests.
+- Learner core unit tests: `PASS` — 3 files / 30 tests (`bkt.test.ts` port-spec from skillcoco bkt.rs incl. the exact first-update value 0.6926829 and the OpenTutor guess/slip table verbatim; `review.test.ts` FSRS determinism/round-trip/golden first Good review = 3 days, stability 2.3065, difficulty 2.1181 with fuzz disabled; `engine.test.ts` end-to-end evidence→BKT→FSRS, append-only duplicate-id rejection, per-event iteration, concept isolation, confidence saturation at 15, Stable→NeedsReview decay at 90 days then recovery).
+- Full core suite: `PASS` — 80 files / 626 tests (was 77/596; +3 files / +30 tests are the learner module).
+- Biome on `packages/core/src/learner`: `PASS` (clean). App `tsc --noEmit`: `PASS`.
+- Existing gates: quality / NSIS / Read-Box / TKG integration run unchanged; authoritative result on GitHub CI for the pushed head.
 - Real DeepSeek E2E: `NOT_RUN` (no model calls in this PR).
+- Golden values were pinned from actual ts-fsrs 5.4.1 runs (disclosed in-test: FSRS-6 default weights, request_retention 0.9, Good grade, long-term scheduler).
 
 ## Blockers / partial truth
 
-- None currently.
+- None currently. Deferred by design to later PRs: SQLite store adapters + panel wiring (with UI under apple-design / emil-design-eng), misconceptions/confusion pairs, transfer, placement CAT, LLM-observation admission gate.
 
-## Next exact action
+## Final handoff snapshot — 2026-08-30 (pre-merge)
 
-Implement the learner module files and tests; run the full core suite; update lock/ledger; commit, push, PR, CI, independent acceptance, ordinary merge.
+- Implementation complete per the PR-003 audit verdicts: `packages/core/src/learner/{types,bkt,review,engine,stores}.ts` + barrel + `./learner` export; dependency surface exactly `ts-fsrs@5.4.1` (exact pin, no caret).
+- Authority boundaries honored: pure deterministic core, storage behind interfaces with injected clock, no LLM imports, no network, no UI. Evidence ledger append-only (duplicate ids rejected); BKT updated per event with question-type guess/slip; FSRS review per event (Good/Again mapping); status degradation is a pure read-time derivation; history never deleted.
+- Next exact action: push, wait for exact-head blocking CI, independent acceptance, ordinary merge PR (no squash/rebase). Post-merge alignment: PR-005 scope (wiring + placement + misconceptions) with the user before code.
 
 ## Recovery protocol
 

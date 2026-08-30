@@ -59,6 +59,8 @@
     "./feedback/*": "./src/feedback/*.ts",
     "./learning": "./src/learning/index.ts",
     "./learning/*": "./src/learning/*.ts",
+    "./learner": "./src/learner/index.ts",
+    "./learner/*": "./src/learner/*.ts",
     "./book-skill": "./src/book-skill/index.ts",
     "./book-skill/*": "./src/book-skill/*.ts"
   },
