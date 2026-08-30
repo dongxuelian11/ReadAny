@@ -47,6 +47,9 @@ __pycache__/
 # Pinned The Knowledge Guy development checkout and derived book-skill cache
 .tkg/
 
+# Pinned OSS audit checkouts (PR-003 learner-core audit)
+.audit/
+
 readese/*
 
 # Local WebDAV test server
