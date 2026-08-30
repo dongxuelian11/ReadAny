@@ -20,6 +20,8 @@ import type {
   PlacementStore,
 } from "./placement";
 import { DuplicateEvidenceIdError } from "./stores";
+import type { TeachingSession, TeachingStep } from "./teaching";
+import type { TeachingStore } from "./teaching-store";
 import type {
   ConceptMastery,
   EvidenceEvent,
@@ -334,6 +336,67 @@ export class SqlitePlacementStore implements PlacementStore {
   }
 }
 
+export class SqliteTeachingStore implements TeachingStore {
+  constructor(private readonly database?: IDatabase) {}
+
+  private async db(): Promise<IDatabase> {
+    return this.database ?? (await getDB());
+  }
+
+  private static rowToSession(row: Record<string, unknown>): TeachingSession {
+    return {
+      id: String(row.id),
+      goalId: String(row.goal_id),
+      bookId: String(row.book_id),
+      status: row.status as TeachingSession["status"],
+      steps: JSON.parse(String(row.steps_json)) as TeachingStep[],
+      currentIndex: Number(row.current_index),
+      startedAt: Number(row.started_at),
+      completedAt: row.completed_at === null ? null : Number(row.completed_at),
+    };
+  }
+
+  async get(id: string): Promise<TeachingSession | null> {
+    const database = await this.db();
+    const rows = await database.select<Record<string, unknown>>(
+      "SELECT * FROM learner_teaching_sessions WHERE id = ?",
+      [id],
+    );
+    const row = rows[0];
+    return row ? SqliteTeachingStore.rowToSession(row) : null;
+  }
+
+  async put(session: TeachingSession): Promise<void> {
+    const database = await this.db();
+    await runWithDbRetry(() =>
+      database.execute(
+        `INSERT OR REPLACE INTO learner_teaching_sessions
+          (id, goal_id, book_id, status, steps_json, current_index, started_at, completed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          session.id,
+          session.goalId,
+          session.bookId,
+          session.status,
+          JSON.stringify(session.steps),
+          session.currentIndex,
+          session.startedAt,
+          session.completedAt,
+        ],
+      ),
+    );
+  }
+
+  async getActive(): Promise<TeachingSession | null> {
+    const database = await this.db();
+    const rows = await database.select<Record<string, unknown>>(
+      "SELECT * FROM learner_teaching_sessions WHERE status = 'active' ORDER BY started_at DESC",
+    );
+    const row = rows[0];
+    return row ? SqliteTeachingStore.rowToSession(row) : null;
+  }
+}
+
 export class SqliteGoalStore implements GoalStore {
   constructor(private readonly database?: IDatabase) {}
 
@@ -416,6 +479,7 @@ export interface SqliteLearnerStores {
   reviews: LearnerReviewStore;
   placements: PlacementStore;
   goals: GoalStore;
+  teachings: TeachingStore;
 }
 
 export function createSqliteLearnerStores(database?: IDatabase): SqliteLearnerStores {
@@ -425,5 +489,6 @@ export function createSqliteLearnerStores(database?: IDatabase): SqliteLearnerSt
     reviews: new SqliteLearnerReviewStore(database),
     placements: new SqlitePlacementStore(database),
     goals: new SqliteGoalStore(database),
+    teachings: new SqliteTeachingStore(database),
   };
 }

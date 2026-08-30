@@ -810,6 +810,18 @@ export async function initDatabase(): Promise<void> {
       await database.execute(
         "CREATE INDEX IF NOT EXISTS idx_learner_goals_book ON learner_goals(book_id, active, created_at)",
       );
+      await database.execute(`
+    CREATE TABLE IF NOT EXISTS learner_teaching_sessions (
+      id TEXT PRIMARY KEY,
+      goal_id TEXT NOT NULL,
+      book_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      steps_json TEXT NOT NULL,
+      current_index INTEGER NOT NULL DEFAULT 0,
+      started_at INTEGER NOT NULL,
+      completed_at INTEGER
+    )
+  `);
 
       const platform = getPlatformService();
       if (platform.isDesktop) {
