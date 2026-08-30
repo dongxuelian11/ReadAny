@@ -45,7 +45,7 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 - Base: `origin/main` `1427cc85f9f9bd19dfedf9b632adf8c07c2ff7d1`.
 - Branch `feat/pr008-goal-model` created normally from that exact base; initial HEAD `1427cc85f9f9bd19dfedf9b632adf8c07c2ff7d1`.
-- Product PR: `NOT_CREATED`.
+- Product PR: https://github.com/dongxuelian11/ReadAny/pull/9 (created 2026-08-30, base origin/main 1427cc85).
 
 ## Test truth
 
@@ -61,9 +61,7 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 ## Final handoff snapshot — 2026-08-30 (pre-merge)
 
-- Implementation complete: `goal.ts` (GoalSpec + deterministic classifyGap/buildCurriculum with depth floors), `goal-parse.ts` (LLM parse boundary, fail-closed validation, book-order preservation), `goal-store.ts` (interface + in-memory + supersession invariant), `SqliteGoalStore` + `learner_goals` table, app `goal-trigger.ts` (startGoalForBook / getActiveGoal / getCurriculumForGoal).
-- Next exact action: push, wait for exact-head blocking CI, independent acceptance, ordinary merge (no squash/rebase). Post-merge: UI surfacing belongs to the frontend owner; future backend candidates are multi-book goals and prerequisite-aware reordering once a concept graph exists.
-
-## Recovery protocol
-
-After compaction/restart: reread the authoritative handoff, this ledger, and the PR-003 audit doc; inspect git status/branch/HEAD/remotes; reconcile with GitHub PR/CI state; fail closed on disagreement. Never infer a PASS or COMPLETE state from missing context.
+- Implementation complete and CI green: exact head 8e2b8977 (run 33313655868) — blocking quality PASS (4m28s, 86 files / 668 tests), blocking Windows NSIS PASS (13m51s), blocking pinned Read-Box integration PASS (41s), blocking pinned TKG integration PASS (2m22s). Non-gating baseline-debt FAILs as documented debt.
+- PASS — independent acceptance review (2026-08-30): 7/7 criteria PASS, 0 blocking, 3 non-blocking notes recorded below. Every ledger number independently verified (12 it() blocks / 9 files 72 tests / 86 files 668 tests).
+- Known non-blocking notes carried forward: (1) validateGoalParse does not deduplicate repeated conceptIds from the model (hardening candidate); (2) placement-only gap entries carry the stale estimate in mastery while classified missing — documented estimate-is-not-evidence semantics; (3) ledger PR-number staleness inherent to pre-merge snapshots.
+- Next exact action: push this housekeeping commit, wait for exact-head blocking CI on the new head, then ordinary merge PR #9 (no squash/rebase). Post-merge: goals/curricula UI surfacing belongs to the frontend owner; remaining backend candidates are multi-book goals and prerequisite-aware reordering once a concept graph exists.
