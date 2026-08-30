@@ -49,17 +49,20 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 ## Test truth
 
-- Goal/curriculum tests: `NOT_RUN` at ledger creation.
+- Goal/curriculum tests: `PASS` — 1 new file / 12 tests (gap classification incl. the placement-estimate-is-not-evidence rule and lapsed-before-depth ordering; curriculum order/action/reason/empty cases; prompt contract; parse validation incl. id dropping + book-order preservation + depth fallback + fail-closed zero-surviving-chapters; one-retry-then-fail parse; spec assembly; store supersession invariant incl. cross-book isolation). Learner module total: 9 test files / 72 tests.
+- Full core suite: `PASS` — 86 files / 668 tests (was 85/656; +1 file / +12 tests).
+- Core tsc: `PASS`. App tsc: `PASS` (goal-trigger deps assembly). Biome on learner module + goal-trigger: `PASS` (clean).
 - Existing gates (quality / NSIS / Read-Box / TKG): run unchanged; authoritative result on GitHub CI.
 - Real DeepSeek E2E: `NOT_RUN` (parsing tested against a deterministic fake; no real key calls).
 
 ## Blockers / partial truth
 
-- None currently. Deferred by design: goal→multiple books, prerequisite-aware reordering, curriculum execution/teaching, UI.
+- None currently. Deferred by design: multi-book goals, prerequisite-aware reordering (no edge model), curriculum execution/teaching loop, UI (frontend owner).
 
-## Next exact action
+## Final handoff snapshot — 2026-08-30 (pre-merge)
 
-Implement goal types + parsing + storage + gap/curriculum + tests; full verification; commit, push, PR, CI, independent acceptance, ordinary merge.
+- Implementation complete: `goal.ts` (GoalSpec + deterministic classifyGap/buildCurriculum with depth floors), `goal-parse.ts` (LLM parse boundary, fail-closed validation, book-order preservation), `goal-store.ts` (interface + in-memory + supersession invariant), `SqliteGoalStore` + `learner_goals` table, app `goal-trigger.ts` (startGoalForBook / getActiveGoal / getCurriculumForGoal).
+- Next exact action: push, wait for exact-head blocking CI, independent acceptance, ordinary merge (no squash/rebase). Post-merge: UI surfacing belongs to the frontend owner; future backend candidates are multi-book goals and prerequisite-aware reordering once a concept graph exists.
 
 ## Recovery protocol
 

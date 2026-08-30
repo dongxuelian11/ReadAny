@@ -793,6 +793,23 @@ export async function initDatabase(): Promise<void> {
       responses_json TEXT NOT NULL DEFAULT '[]'
     )
   `);
+      await database.execute(`
+    CREATE TABLE IF NOT EXISTS learner_goals (
+      goal_id TEXT PRIMARY KEY,
+      book_id TEXT NOT NULL,
+      goal_text TEXT NOT NULL,
+      restated_goal TEXT NOT NULL,
+      target_capabilities_json TEXT NOT NULL DEFAULT '[]',
+      chapters_json TEXT NOT NULL,
+      milestones_json TEXT NOT NULL DEFAULT '[]',
+      completion_criteria_json TEXT NOT NULL DEFAULT '[]',
+      created_at INTEGER NOT NULL,
+      active INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+      await database.execute(
+        "CREATE INDEX IF NOT EXISTS idx_learner_goals_book ON learner_goals(book_id, active, created_at)",
+      );
 
       const platform = getPlatformService();
       if (platform.isDesktop) {

@@ -10,3 +10,6 @@ export * from "./placement-generation";
 export * from "./placement-engine";
 export * from "./queries";
 export * from "./panel-state";
+export * from "./goal";
+export * from "./goal-parse";
+export * from "./goal-store";
