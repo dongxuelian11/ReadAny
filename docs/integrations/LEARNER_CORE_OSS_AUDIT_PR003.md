@@ -35,7 +35,7 @@ All deep targets were cloned pinned (detached HEAD) under the gitignored `.audit
 ### 1. Evidence events — ADOPT_DESIGN (OpenTutor taxonomy + SkillCoco ledger discipline)
 
 - Adopt **OpenTutor's evidence taxonomy**: `apps/api/models/practice.py` — `PracticeProblem` (7 question types, `knowledge_points` JSON list, `difficulty_layer` 1=recall/2=application/3=trap, `problem_metadata {potential_traps, core_concept, bloom_level}`, `is_diagnostic`) and `PracticeResult` (`error_category`: conceptual|procedural|computational|reading|careless, `answer_time_ms`); `apps/api/models/ingestion.py` — `WrongAnswer` with `error_detail {category, confidence, evidence, related_concept}` and `diagnosis`: fundamental_gap|trap_vulnerability|carelessness|mastered. Direct SQLite→SQLite translation.
-- Adopt **SkillCoco's append-only ledger discipline**: `migrations/v016_quiz_attempts.rs` — "one row per submission, never upserted — so the evidence ledger (D-06) has quiz history to read from, not last-value"; plus `adaptation_events` (old/new value + reason) as the audit-log pattern.
+- Adopt **SkillCoco's append-only ledger discipline**: `migrations/v016_quiz_attempts.rs` — "one row per submission, never upserted — so the evidence ledger (D-06) has quiz history to read from" (our emphasis: history, not last-value); plus `adaptation_events` (old/new value + reason) as the audit-log pattern.
 - Guardrails adopted from the audits: evidence → mastery linkage must be explicit (knowledge-point tagging per evidence row); teach-back/chat signals may become evidence candidates but never direct mastery (handoff §9 is preserved by both references).
 
 ### 2. Concept Mastery (BKT) — PORT_ALGORITHM (~50-line TS core) + ADOPT_DESIGN (parameters, semantics); pyBKT as optional offline-fitting sidecar
@@ -63,7 +63,7 @@ All deep targets were cloned pinned (detached HEAD) under the gitignored `.audit
 
 ### 5. Transfer — BUILD_FRESH (thin), idea adopted from OpenTutor
 
-- OpenTutor's `transfer_detector.py` is a ~20-line cross-course edge traversal recommending reinforcement targets (`source_mastery ≥ 0.7 && target_mastery < 0.7`). Adopt the idea; there is no transfer *measurement* anywhere (no near/far transfer task design). Our Transfer component (handoff §9) needs real task design later; nothing to port.
+- OpenTutor's `transfer_detector.py` (~60 lines of core logic) is a cross-course edge traversal recommending reinforcement targets (`source_mastery ≥ 0.7 && target_mastery < 0.7`). Adopt the idea; there is no transfer *measurement* anywhere (no near/far transfer task design). Our Transfer component (handoff §9) needs real task design later; nothing to port.
 
 ### 6. Placement (摸底) — ADOPT_DESIGN + PORT_ALGORITHM (OpenTutor CAT pretest), rewrite the estimator
 

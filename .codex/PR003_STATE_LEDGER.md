@@ -37,7 +37,7 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 - Base: `origin/main` `3fde5704c3af606cbdd06203ddb6e1e891268d28`.
 - Branch `docs/pr003-learner-core-audit` created normally from that exact base; initial HEAD `3fde5704c3af606cbdd06203ddb6e1e891268d28`.
-- Product PR: `NOT_CREATED`.
+- Product PR: https://github.com/dongxuelian11/ReadAny/pull/4 (created 2026-08-30, base `origin/main` `3fde5704c3af606cbdd06203ddb6e1e891268d28`).
 
 ## Test truth
 
@@ -54,7 +54,7 @@ Last updated: 2026-08-30 (Asia/Shanghai)
 
 ## Next exact action
 
-Dispatch parallel source-level audit agents for the five pinned clones plus the quick-pass set; synthesize per-component Build-vs-Reuse verdicts into `docs/integrations/LEARNER_CORE_OSS_AUDIT_PR003.md`; update the `INTEGRATIONS.lock.json` watchlist entries with pins/licenses/verdicts.
+Push the housekeeping commit, wait for exact-head blocking CI on GitHub (authoritative), obtain independent acceptance, then ordinary merge PR #4 (no squash/rebase). After merge: align PR-004 (the Track D Learner Authority implementation PR) scope with the user against the audit verdicts before writing code.
 
 ## Recovery protocol
 
