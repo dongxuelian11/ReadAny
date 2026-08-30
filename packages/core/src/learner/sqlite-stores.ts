@@ -10,6 +10,8 @@
 import { getDB } from "../db/db-core";
 import { runWithDbRetry } from "../db/write-retry";
 import type { IDatabase } from "../services/platform";
+import type { GoalSpec } from "./goal";
+import type { GoalStore } from "./goal-store";
 import type {
   PlacementItem,
   PlacementResponse,
@@ -332,11 +334,88 @@ export class SqlitePlacementStore implements PlacementStore {
   }
 }
 
+export class SqliteGoalStore implements GoalStore {
+  constructor(private readonly database?: IDatabase) {}
+
+  private async db(): Promise<IDatabase> {
+    return this.database ?? (await getDB());
+  }
+
+  private static rowToGoal(row: Record<string, unknown>): GoalSpec {
+    return {
+      goalId: String(row.goal_id),
+      bookId: String(row.book_id),
+      goalText: String(row.goal_text),
+      restatedGoal: String(row.restated_goal),
+      targetCapabilities: JSON.parse(String(row.target_capabilities_json)) as string[],
+      chapters: JSON.parse(String(row.chapters_json)) as GoalSpec["chapters"],
+      milestones: JSON.parse(String(row.milestones_json)) as string[],
+      completionCriteria: JSON.parse(String(row.completion_criteria_json)) as string[],
+      createdAt: Number(row.created_at),
+      active: Number(row.active) === 1,
+    };
+  }
+
+  async get(goalId: string): Promise<GoalSpec | null> {
+    const database = await this.db();
+    const rows = await database.select<Record<string, unknown>>(
+      "SELECT * FROM learner_goals WHERE goal_id = ?",
+      [goalId],
+    );
+    const row = rows[0];
+    return row ? SqliteGoalStore.rowToGoal(row) : null;
+  }
+
+  async put(goal: GoalSpec): Promise<void> {
+    const database = await this.db();
+    await runWithDbRetry(() =>
+      database.execute(
+        `INSERT OR REPLACE INTO learner_goals
+          (goal_id, book_id, goal_text, restated_goal, target_capabilities_json, chapters_json,
+           milestones_json, completion_criteria_json, created_at, active)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          goal.goalId,
+          goal.bookId,
+          goal.goalText,
+          goal.restatedGoal,
+          JSON.stringify(goal.targetCapabilities),
+          JSON.stringify(goal.chapters),
+          JSON.stringify(goal.milestones),
+          JSON.stringify(goal.completionCriteria),
+          goal.createdAt,
+          goal.active ? 1 : 0,
+        ],
+      ),
+    );
+  }
+
+  async listByBook(bookId: string): Promise<GoalSpec[]> {
+    const database = await this.db();
+    const rows = await database.select<Record<string, unknown>>(
+      "SELECT * FROM learner_goals WHERE book_id = ? ORDER BY created_at DESC",
+      [bookId],
+    );
+    return rows.map((row) => SqliteGoalStore.rowToGoal(row));
+  }
+
+  async getActive(bookId: string): Promise<GoalSpec | null> {
+    const database = await this.db();
+    const rows = await database.select<Record<string, unknown>>(
+      "SELECT * FROM learner_goals WHERE book_id = ? AND active = 1 ORDER BY created_at DESC",
+      [bookId],
+    );
+    const row = rows[0];
+    return row ? SqliteGoalStore.rowToGoal(row) : null;
+  }
+}
+
 export interface SqliteLearnerStores {
   evidence: LearnerEvidenceStore;
   mastery: LearnerMasteryStore;
   reviews: LearnerReviewStore;
   placements: PlacementStore;
+  goals: GoalStore;
 }
 
 export function createSqliteLearnerStores(database?: IDatabase): SqliteLearnerStores {
@@ -345,5 +424,6 @@ export function createSqliteLearnerStores(database?: IDatabase): SqliteLearnerSt
     mastery: new SqliteLearnerMasteryStore(database),
     reviews: new SqliteLearnerReviewStore(database),
     placements: new SqlitePlacementStore(database),
+    goals: new SqliteGoalStore(database),
   };
 }
