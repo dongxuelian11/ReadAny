@@ -11,6 +11,7 @@ export * from "./placement";
 export * from "./placement-generation";
 export * from "./placement-engine";
 export * from "./queries";
+export * from "./read-model";
 export * from "./panel-state";
 export * from "./goal";
 export * from "./goal-parse";

@@ -5,7 +5,7 @@
 import { loadExistingBookSkill } from "@/lib/book-skill/trigger";
 import { createPlacementEngineDeps } from "@/lib/learner/placement-trigger";
 import { fallbackContentService } from "@readany/core/ai";
-import { getMasteryForConcepts, listDueReviewConcepts } from "@readany/core/learner";
+import { getLearnerStateAt, listDueReviewConcepts } from "@readany/core/learner";
 import type { LearnerDueRow, LearnerMasteryRow } from "@readany/core/learner";
 import type { Book } from "@readany/core/types";
 
@@ -28,18 +28,21 @@ async function bookChapterConcepts(
     }));
 }
 
-/** Per-chapter mastery rows for the current book (order = book order). */
+/** Per-chapter mastery rows for the current book (order = book order). Rows
+ * come from the current-instant read model (PR-013): the status chips in the
+ * panel reflect forgetting at read time, not the stale persisted status. */
 export async function getBookMasteryOverview(book: Book): Promise<LearnerMasteryRow[]> {
   const concepts = await bookChapterConcepts(book);
   const deps = await createPlacementEngineDeps();
-  const rows = await getMasteryForConcepts(
+  const states = await getLearnerStateAt(
     deps,
     concepts.map((concept) => concept.conceptId),
   );
-  return concepts.map((concept, index) => ({
+  const stateByConcept = new Map(states.map((entry) => [entry.conceptId, entry.state]));
+  return concepts.map((concept) => ({
     conceptId: concept.conceptId,
     title: concept.title,
-    mastery: rows[index].mastery,
+    mastery: stateByConcept.get(concept.conceptId) ?? null,
   }));
 }
 

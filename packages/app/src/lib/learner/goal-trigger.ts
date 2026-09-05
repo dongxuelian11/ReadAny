@@ -11,6 +11,7 @@ import {
   buildCurriculum,
   classifyGap,
   createSqliteLearnerStores,
+  getLearnerStateAt,
   parseGoal,
   putGoalWithSupersession,
   toGoalSpec,
@@ -73,12 +74,19 @@ export async function getActiveGoal(book: Book): Promise<GoalSpec | null> {
 }
 
 /** Rebuild the deterministic curriculum for a goal against the current learner
- * state (pure computation — safe to call any time). */
+ * state (pure computation — safe to call any time). The learner state comes
+ * from the current-instant read model (PR-013): gap classification must see
+ * forgetting at read time, not the stale persisted status. */
 export async function getCurriculumForGoal(goal: GoalSpec): Promise<PersonalCurriculum> {
   const deps = await createGoalEngineDeps();
+  const states = await getLearnerStateAt(
+    deps,
+    goal.chapters.map((chapter) => chapter.conceptId),
+  );
+  const stateByConcept = new Map(states.map((entry) => [entry.conceptId, entry.state]));
   const entries = [];
   for (const chapter of goal.chapters) {
-    const row = await deps.mastery.get(chapter.conceptId);
+    const row = stateByConcept.get(chapter.conceptId) ?? null;
     const learner: LearnerConceptState | null = row
       ? {
           mastery: row.mastery,

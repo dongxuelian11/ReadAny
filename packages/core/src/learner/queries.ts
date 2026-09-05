@@ -1,7 +1,11 @@
 // Read-side queries over the learner stores: due review surfacing. Pure
-// aggregation over the store interfaces — no SQL of its own.
+// aggregation over the store interfaces — no SQL of its own. Status is
+// computed through the current-instant read model (PR-013): a due card whose
+// retrievability has decayed must surface as needs_review even when the
+// persisted mastery row still says stable.
 
 import type { PlacementEngineDeps } from "./placement-engine";
+import { currentConceptMastery } from "./read-model";
 import type { ConceptMastery, LearnerReviewCardData } from "./types";
 
 export interface DueReviewConcept {
@@ -11,8 +15,8 @@ export interface DueReviewConcept {
 }
 
 /** Concepts whose FSRS review card is due at or before `timestamp`, ordered by
- * due time; mastery/status joined from the mastery store (null when the
- * concept was never assessed). */
+ * due time; mastery/status joined from the mastery store and recomputed at
+ * `timestamp` (null when the concept was never assessed). */
 export async function listDueReviewConcepts(
   deps: PlacementEngineDeps,
   timestamp: number,
@@ -21,8 +25,9 @@ export async function listDueReviewConcepts(
   const cards = await deps.reviews.listCardsDueBefore(timestamp, limit);
   const due: DueReviewConcept[] = [];
   for (const card of cards) {
-    const mastery = await deps.mastery.get(card.conceptId);
-    due.push({ card, mastery, status: mastery?.status ?? null });
+    const row = await deps.mastery.get(card.conceptId);
+    const state = row ? currentConceptMastery({ row, card, now: timestamp }) : null;
+    due.push({ card, mastery: state, status: state?.status ?? null });
   }
   return due;
 }
