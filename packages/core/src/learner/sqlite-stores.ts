@@ -10,6 +10,12 @@
 import { getDB } from "../db/db-core";
 import { runWithDbRetry } from "../db/write-retry";
 import type { IDatabase } from "../services/platform";
+import type {
+  ConceptIdentityStore,
+  ConceptRecord,
+  ConceptRelation,
+  ConceptRelationKind,
+} from "./concept-identity";
 import type { EvidenceEventInput } from "./engine";
 import type { GoalSpec } from "./goal";
 import type { GoalStore } from "./goal-store";
@@ -485,6 +491,7 @@ export interface SqliteLearnerStores {
   placements: PlacementStore;
   goals: GoalStore;
   teachings: TeachingStore;
+  identity: ConceptIdentityStore;
 }
 
 export function createSqliteLearnerStores(database?: IDatabase): SqliteLearnerStores {
@@ -495,6 +502,7 @@ export function createSqliteLearnerStores(database?: IDatabase): SqliteLearnerSt
     placements: new SqlitePlacementStore(database),
     goals: new SqliteGoalStore(database),
     teachings: new SqliteTeachingStore(database),
+    identity: new SqliteConceptIdentityStore(database),
   };
 }
 
@@ -568,4 +576,94 @@ export class SqliteEvidenceOutboxStore implements LearnerEvidenceOutboxStore {
 
 export function createSqliteEvidenceOutbox(database?: IDatabase): LearnerEvidenceOutboxStore {
   return new SqliteEvidenceOutboxStore(database);
+}
+
+/** Concept identity registry adapter (PR-015). Registration is INSERT OR
+ * IGNORE (first record wins); source-unit/alias bindings are INSERT OR
+ * REPLACE (rebinding is the documented V2 migration path). */
+export class SqliteConceptIdentityStore implements ConceptIdentityStore {
+  constructor(private readonly database?: IDatabase) {}
+
+  private async db(): Promise<IDatabase> {
+    return this.database ?? (await getDB());
+  }
+
+  async registerConcept(concept: ConceptRecord): Promise<void> {
+    const database = await this.db();
+    await runWithDbRetry(() =>
+      database.execute(
+        "INSERT OR IGNORE INTO learner_concepts (concept_id, display_name, created_at) VALUES (?, ?, ?)",
+        [concept.conceptId, concept.displayName, concept.createdAt],
+      ),
+    );
+  }
+
+  async bindSourceUnit(sourceUnitId: string, conceptId: string): Promise<void> {
+    const database = await this.db();
+    await runWithDbRetry(() =>
+      database.execute(
+        "INSERT OR REPLACE INTO learner_source_units (source_unit_id, concept_id) VALUES (?, ?)",
+        [sourceUnitId, conceptId],
+      ),
+    );
+  }
+
+  async bindAlias(alias: string, conceptId: string): Promise<void> {
+    const database = await this.db();
+    await runWithDbRetry(() =>
+      database.execute(
+        "INSERT OR REPLACE INTO learner_concept_aliases (alias, concept_id) VALUES (?, ?)",
+        [alias, conceptId],
+      ),
+    );
+  }
+
+  async resolveBySourceUnit(sourceUnitId: string): Promise<string | null> {
+    const database = await this.db();
+    const rows = await database.select<{ concept_id: string }>(
+      "SELECT concept_id FROM learner_source_units WHERE source_unit_id = ?",
+      [sourceUnitId],
+    );
+    return rows[0] ? String(rows[0].concept_id) : null;
+  }
+
+  async resolveByAlias(alias: string): Promise<string | null> {
+    const database = await this.db();
+    const rows = await database.select<{ concept_id: string }>(
+      "SELECT concept_id FROM learner_concept_aliases WHERE alias = ?",
+      [alias],
+    );
+    return rows[0] ? String(rows[0].concept_id) : null;
+  }
+
+  async bindRelation(
+    relation: Omit<ConceptRelation, "createdAt">,
+    createdAt: number,
+  ): Promise<void> {
+    const database = await this.db();
+    await runWithDbRetry(() =>
+      database.execute(
+        `INSERT OR IGNORE INTO learner_concept_relations (concept_id, related_concept_id, relation, created_at)
+         VALUES (?, ?, ?, ?)`,
+        [relation.conceptId, relation.relatedConceptId, relation.relation, createdAt],
+      ),
+    );
+  }
+
+  async listRelated(conceptId: string): Promise<ConceptRelation[]> {
+    const database = await this.db();
+    const rows = await database.select<Record<string, unknown>>(
+      `SELECT concept_id, related_concept_id, relation, created_at
+       FROM learner_concept_relations
+       WHERE concept_id = ?
+       ORDER BY created_at ASC`,
+      [conceptId],
+    );
+    return rows.map((row) => ({
+      conceptId: String(row.concept_id),
+      relatedConceptId: String(row.related_concept_id),
+      relation: row.relation as ConceptRelationKind,
+      createdAt: Number(row.created_at),
+    }));
+  }
 }

@@ -13,21 +13,23 @@ import {
   answerPlacementItem as coreAnswerPlacementItem,
   finalizePlacement as coreFinalizePlacement,
   createSqliteLearnerStores,
+  ensureChapterConceptIdentity,
   generatePlacementItems,
   getActivePlacementSession,
   startPlacementSession,
 } from "@readany/core/learner";
-import type { PlacementConcept, PlacementSession, PlacementVerdict } from "@readany/core/learner";
+import type { PlacementSession, PlacementVerdict } from "@readany/core/learner";
 import type { Book } from "@readany/core/types";
 
 /** CAT maximum is 20 answered items; keep a small selection buffer. */
 const PLACEMENT_POOL_CAP = PLACEMENT_MAX_ITEMS + 4;
 
-async function placementConcepts(book: Book): Promise<PlacementConcept[]> {
+async function placementConcepts(book: Book) {
   const skill = await loadExistingBookSkill(book);
   if (skill) {
     return skill.manifest.readany.chapters.map((chapter) => ({
       conceptId: `readany:book:${book.id}:chapter:${chapter.chapterIndex}`,
+      chapterIndex: chapter.chapterIndex,
       title: chapter.title,
     }));
   }
@@ -36,6 +38,7 @@ async function placementConcepts(book: Book): Promise<PlacementConcept[]> {
     .filter((chapter) => chapter.content.trim().length > 0)
     .map((chapter) => ({
       conceptId: `readany:book:${book.id}:chapter:${chapter.index}`,
+      chapterIndex: chapter.index,
       title: chapter.title || `Chapter ${chapter.index + 1}`,
     }));
 }
@@ -49,10 +52,21 @@ export async function createPlacementEngineDeps() {
 
 /** Start the placement flow for a book. Fail-closed when the generated pool is
  * below the CAT minimum. Uses the book's existing skill chapters when present,
- * otherwise the canonical chapter extraction. */
+ * otherwise the canonical chapter extraction. Placement start is a concept-
+ * identity registration point (PR-015) for the capped pool. */
 export async function startBookPlacement(book: Book): Promise<PlacementSession> {
+  const deps = await createPlacementEngineDeps();
   const allConcepts = await placementConcepts(book);
   const concepts = allConcepts.slice(0, PLACEMENT_POOL_CAP);
+  await Promise.all(
+    concepts.map((concept) =>
+      ensureChapterConceptIdentity(
+        deps.identity,
+        { bookId: book.id, chapterIndex: concept.chapterIndex, title: concept.title },
+        deps.clock.now().getTime(),
+      ),
+    ),
+  );
   const aiConfig = useSettingsStore.getState().aiConfig;
   const llm = await createBookSkillLlmClient(aiConfig);
   const items = await generatePlacementItems({
@@ -61,7 +75,7 @@ export async function startBookPlacement(book: Book): Promise<PlacementSession> 
     llm,
     idPrefix: `placement:${book.id}`,
   });
-  return startPlacementSession(await createPlacementEngineDeps(), items);
+  return startPlacementSession(deps, items);
 }
 
 /** The active placement session, if one is in progress. */
