@@ -51,10 +51,18 @@ export async function getShelfSkills(): Promise<InstalledBookSkill[]> {
   return skills;
 }
 
-/** Ask one question across every installed Book Skill on the shelf. */
+/** Ask one question across every installed Book Skill on the shelf. Semantic
+ * routing (PR-011) activates from three books up — the case where keyword
+ * matching actually struggles; below that the deterministic keyword router is
+ * exact and saves the extra routing call (PR-017). */
 export async function askTheShelf(question: string): Promise<CrossBookAnswer> {
   const skills = await getShelfSkills();
   const aiConfig = useSettingsStore.getState().aiConfig;
   const llm = await createBookSkillLlmClient(aiConfig);
-  return askAcrossBooks({ skills, question, llm });
+  return askAcrossBooks({
+    skills,
+    question,
+    llm,
+    semanticRouting: skills.length >= 3,
+  });
 }
