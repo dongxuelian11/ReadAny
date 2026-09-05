@@ -6,8 +6,12 @@ import { loadExistingBookSkill } from "@/lib/book-skill/trigger";
 import { resolveDesktopDataPath } from "@/lib/storage/desktop-library-root";
 import { useLibraryStore } from "@/stores/library-store";
 import { useSettingsStore } from "@/stores/settings-store";
-import { askAcrossBooks } from "@readany/core/book-skill";
-import type { CrossBookAnswer, InstalledBookSkill } from "@readany/core/book-skill";
+import { askAcrossBooks, createSqliteAskHistoryStore } from "@readany/core/book-skill";
+import type {
+  CrossBookAnswer,
+  InstalledBookSkill,
+  StoredAskAnswer,
+} from "@readany/core/book-skill";
 import { createBookSkillLlmClient } from "@readany/core/book-skill";
 import type { Book } from "@readany/core/types";
 
@@ -65,4 +69,27 @@ export async function askTheShelf(question: string): Promise<CrossBookAnswer> {
     llm,
     semanticRouting: skills.length >= 3,
   });
+}
+
+/** Ask + persist (PR-020): an ask costs several LLM calls, so the full
+ * grounded report is stored and the refreshed history returned alongside. */
+export async function askTheShelfAndSave(
+  question: string,
+): Promise<{ answer: CrossBookAnswer; history: StoredAskAnswer[] }> {
+  const answer = await askTheShelf(question);
+  const store = createSqliteAskHistoryStore();
+  const entry: StoredAskAnswer = {
+    id: crypto.randomUUID(),
+    question,
+    createdAt: Date.now(),
+    answer,
+  };
+  await store.save(entry);
+  const history = await store.list();
+  return { answer, history };
+}
+
+/** The persisted ask history, newest first. */
+export async function getAskHistory(limit?: number): Promise<StoredAskAnswer[]> {
+  return createSqliteAskHistoryStore().list(limit);
 }
