@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { LearningQuizJudgement, LearningSourceRef } from "../learning/types";
-import { chapterConceptId, quizJudgementToEvidence } from "./evidence-mapping";
+import type {
+  LearningQuizJudgement,
+  LearningQuizQuestion,
+  LearningSourceRef,
+} from "../learning/types";
+import { chapterConceptId, quizEvidenceId, quizJudgementToEvidence } from "./evidence-mapping";
 
 const SOURCE: LearningSourceRef = {
   readAnyBookId: "book-1",
@@ -9,6 +13,17 @@ const SOURCE: LearningSourceRef = {
   title: "Averages",
   text: "...",
   passages: [],
+};
+
+const QUESTION: LearningQuizQuestion = {
+  type: "mc",
+  question: "What does the mean measure?",
+  options: ["Central tendency", "Spread", "Skew", "Shape"],
+};
+
+const OTHER_QUESTION: LearningQuizQuestion = {
+  ...QUESTION,
+  question: "What does the variance measure?",
 };
 
 const CORRECT: LearningQuizJudgement = {
@@ -27,7 +42,7 @@ describe("quiz evidence admission mapping", () => {
   });
 
   it("maps a judged quiz answer to deterministic evidence input", () => {
-    expect(quizJudgementToEvidence(CORRECT, SOURCE)).toEqual({
+    expect(quizJudgementToEvidence(CORRECT, SOURCE, QUESTION)).toMatchObject({
       conceptId: "readany:book:book-1:chapter:3",
       source: "READ_BOX_QUIZ",
       taskType: "quiz",
@@ -35,19 +50,34 @@ describe("quiz evidence admission mapping", () => {
       confidence: 1,
       sourceLocator: { bookId: "book-1", chapterIndex: 3, cfi: "epubcfi(/6/14)" },
     });
-    expect(quizJudgementToEvidence(INCORRECT, SOURCE).result).toBe("incorrect");
+    expect(quizJudgementToEvidence(INCORRECT, SOURCE, QUESTION).result).toBe("incorrect");
+  });
+
+  it("pins a deterministic id: same submission → same id, distinct question → distinct id", () => {
+    const first = quizJudgementToEvidence(CORRECT, SOURCE, QUESTION);
+    const retry = quizJudgementToEvidence(CORRECT, SOURCE, QUESTION);
+    expect(retry.id).toBe(first.id);
+    expect(first.id).toBe(quizEvidenceId(CORRECT, SOURCE, QUESTION));
+
+    const otherQuestion = quizJudgementToEvidence(CORRECT, SOURCE, OTHER_QUESTION);
+    expect(otherQuestion.id).not.toBe(first.id);
+
+    const otherSlot = quizJudgementToEvidence({ ...CORRECT, current: 2 }, SOURCE, QUESTION);
+    expect(otherSlot.id).not.toBe(first.id);
+
+    // The id embeds the chapter-scoped identity so replays stay book-scoped.
+    expect(first.id).toContain("readany:quiz:book-1:ch3:1:");
   });
 
   it("carries the citation back to the canonical source (handoff §9 sourceLocator)", () => {
-    const evidence = quizJudgementToEvidence(CORRECT, SOURCE);
+    const evidence = quizJudgementToEvidence(CORRECT, SOURCE, QUESTION);
     expect(evidence.sourceLocator?.bookId).toBe(SOURCE.readAnyBookId);
     expect(evidence.sourceLocator?.chapterIndex).toBe(SOURCE.location.chapterIndex);
     expect(evidence.sourceLocator?.cfi).toBe(SOURCE.location.cfi);
   });
 
   it("admits evidence without a timestamp (the engine's injected clock owns time)", () => {
-    const evidence = quizJudgementToEvidence(CORRECT, SOURCE) as Record<string, unknown>;
+    const evidence = quizJudgementToEvidence(CORRECT, SOURCE, QUESTION) as Record<string, unknown>;
     expect("timestamp" in evidence).toBe(false);
-    expect("id" in evidence).toBe(false);
   });
 });

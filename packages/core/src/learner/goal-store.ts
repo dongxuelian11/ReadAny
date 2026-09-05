@@ -3,6 +3,7 @@
 // supersedes the previous active goal for the same book (history retained).
 
 import type { GoalSpec } from "./goal";
+import { withLearnerWriteLock } from "./write-lock";
 
 export interface GoalStore {
   get(goalId: string): Promise<GoalSpec | null>;
@@ -22,15 +23,20 @@ export class GoalStoreError extends Error {
 
 /** Persist a goal; when `goal.active` is true, other goals of the same book
  * are deactivated first (in-memory reference implementation of the invariant
- * every adapter must uphold). */
-export async function putGoalWithSupersession(store: GoalStore, goal: GoalSpec): Promise<void> {
-  if (goal.active) {
-    const active = await store.getActive(goal.bookId);
-    if (active && active.goalId !== goal.goalId) {
-      await store.put({ ...active, active: false });
+ * every adapter must uphold). The deactivate-then-activate sequence is a
+ * check-then-act cycle, so it runs under the learner write lock (PR-012):
+ * two concurrent activations of the same book could otherwise both observe
+ * no active goal and leave two active goals behind. */
+export function putGoalWithSupersession(store: GoalStore, goal: GoalSpec): Promise<void> {
+  return withLearnerWriteLock(async () => {
+    if (goal.active) {
+      const active = await store.getActive(goal.bookId);
+      if (active && active.goalId !== goal.goalId) {
+        await store.put({ ...active, active: false });
+      }
     }
-  }
-  await store.put(goal);
+    await store.put(goal);
+  });
 }
 
 export function createInMemoryGoalStore(): GoalStore {

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createSqliteLearnerStores } from "./sqlite-stores";
+import { createSqliteEvidenceOutbox, createSqliteLearnerStores } from "./sqlite-stores";
 import { DuplicateEvidenceIdError } from "./stores";
 import type { EvidenceEvent, LearnerReviewCardData, LearnerReviewLogEntry } from "./types";
 
@@ -222,5 +222,49 @@ describe("sqlite learner stores", () => {
     const { evidence } = createSqliteLearnerStores(injected as never);
     await evidence.append(EVENT);
     expect(injectedExecute).toHaveBeenCalledTimes(1);
+  });
+
+  it("enqueues outbox rows with the event id pinned in the stored JSON (PR-012)", async () => {
+    const outbox = createSqliteEvidenceOutbox();
+    const { event } = await outbox.enqueue(
+      { ...EVENT, sourceLocator: { bookId: "book-1", chapterIndex: 3 } },
+      1788000000000,
+    );
+    expect(event.id).toBe("ev-1");
+    expect(execute).toHaveBeenCalledTimes(1);
+    const [sql, params] = execute.mock.calls[0];
+    expect(sql).toContain("INSERT INTO learner_evidence_outbox");
+    expect(params[2]).toBe(1788000000000);
+    const stored = JSON.parse(params[1] as string) as { id: string; conceptId: string };
+    expect(stored.id).toBe("ev-1");
+    expect(stored.conceptId).toBe(EVENT.conceptId);
+
+    select.mockResolvedValueOnce([
+      {
+        id: "ob-1",
+        event_json: params[1],
+        created_at: 1788000000000,
+        attempts: 2,
+        status: "pending",
+        last_error: "disk on fire",
+      },
+    ]);
+    const pending = await outbox.listPending();
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({
+      outboxId: "ob-1",
+      createdAt: 1788000000000,
+      attempts: 2,
+      status: "pending",
+      lastError: "disk on fire",
+    });
+    expect(pending[0].event.id).toBe("ev-1");
+
+    await outbox.markDone("ob-1");
+    expect(execute.mock.calls[1][0]).toContain("SET status = 'done'");
+
+    await outbox.markError("ob-1", "again");
+    expect(execute.mock.calls[2][0]).toContain("attempts = attempts + 1");
+    expect(execute.mock.calls[2][1]).toEqual(["again", "ob-1"]);
   });
 });

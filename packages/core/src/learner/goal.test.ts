@@ -255,4 +255,20 @@ describe("goal store supersession invariant", () => {
     expect((await store.getActive("b1"))?.goalId).toBe("g2");
     expect((await store.getActive("b2"))?.goalId).toBe("g3");
   });
+
+  it("keeps the one-active invariant under concurrent activations (PR-012 lock)", async () => {
+    const store = createInMemoryGoalStore();
+    const a = { ...goal([target("c0", "working")]), goalId: "ga", createdAt: 1 };
+    const b = { ...goal([target("c1", "working")]), goalId: "gb", createdAt: 2 };
+
+    // Without the write lock both activations would read "no active goal"
+    // before either write lands, leaving two active goals for b1.
+    await Promise.all([putGoalWithSupersession(store, a), putGoalWithSupersession(store, b)]);
+
+    const actives = (await store.listByBook("b1")).filter((entry) => entry.active);
+    expect(actives).toHaveLength(1);
+    // History retained: both goals exist, exactly one active.
+    expect((await store.get("ga"))?.goalId).toBe("ga");
+    expect((await store.get("gb"))?.goalId).toBe("gb");
+  });
 });

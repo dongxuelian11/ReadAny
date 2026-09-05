@@ -21,6 +21,7 @@ import {
 import type { TeachingContent } from "./teaching";
 import type { TeachingStore } from "./teaching-store";
 import type { LearnerClock } from "./types";
+import { withLearnerWriteLock } from "./write-lock";
 
 export interface TeachingEngineDeps {
   clock: LearnerClock;
@@ -40,7 +41,9 @@ export class TeachingStepFailedError extends Error {
 }
 
 /** Start a teaching session from a curriculum; abandons any previously active
- * session (fail-safe supersession, mirroring placement). */
+ * session (fail-safe supersession, mirroring placement). The abandon-then-
+ * create cycle runs under the learner write lock (PR-012) so two concurrent
+ * starts cannot abandon each other and leave two active sessions. */
 export async function startTeachingSession(
   deps: TeachingEngineDeps,
   curriculum: PersonalCurriculum,
@@ -49,30 +52,32 @@ export async function startTeachingSession(
     throw new Error("The curriculum has no steps to teach");
   }
   const now = deps.clock.now();
-  const active = await deps.teachings.getActive();
-  if (active) {
-    await deps.teachings.put({ ...active, status: "abandoned", completedAt: now.getTime() });
-  }
-  const steps: TeachingStep[] = curriculum.steps.map((step) => ({
-    conceptId: step.conceptId,
-    title: step.title,
-    action: step.action,
-    content: null,
-    answered: false,
-    correct: null,
-  }));
-  const session: TeachingSession = {
-    id: crypto.randomUUID(),
-    goalId: curriculum.goalId,
-    bookId: curriculum.bookId,
-    status: "active",
-    steps,
-    currentIndex: 0,
-    startedAt: now.getTime(),
-    completedAt: null,
-  };
-  await deps.teachings.put(session);
-  return session;
+  return withLearnerWriteLock(async () => {
+    const active = await deps.teachings.getActive();
+    if (active) {
+      await deps.teachings.put({ ...active, status: "abandoned", completedAt: now.getTime() });
+    }
+    const steps: TeachingStep[] = curriculum.steps.map((step) => ({
+      conceptId: step.conceptId,
+      title: step.title,
+      action: step.action,
+      content: null,
+      answered: false,
+      correct: null,
+    }));
+    const session: TeachingSession = {
+      id: crypto.randomUUID(),
+      goalId: curriculum.goalId,
+      bookId: curriculum.bookId,
+      status: "active",
+      steps,
+      currentIndex: 0,
+      startedAt: now.getTime(),
+      completedAt: null,
+    };
+    await deps.teachings.put(session);
+    return session;
+  });
 }
 
 export async function getTeachingSession(

@@ -10,8 +10,10 @@
 import { getDB } from "../db/db-core";
 import { runWithDbRetry } from "../db/write-retry";
 import type { IDatabase } from "../services/platform";
+import type { EvidenceEventInput } from "./engine";
 import type { GoalSpec } from "./goal";
 import type { GoalStore } from "./goal-store";
+import type { LearnerEvidenceOutboxStore, PinnedEvidenceEvent } from "./outbox";
 import type {
   PlacementItem,
   PlacementResponse,
@@ -491,4 +493,76 @@ export function createSqliteLearnerStores(database?: IDatabase): SqliteLearnerSt
     goals: new SqliteGoalStore(database),
     teachings: new SqliteTeachingStore(database),
   };
+}
+
+/** Durable evidence outbox adapter (PR-012): the event is stored as JSON with
+ * its id already pinned, so a replayed row applies byte-identically and hits
+ * the append-only ledger's duplicate rejection instead of double-applying. */
+export class SqliteEvidenceOutboxStore implements LearnerEvidenceOutboxStore {
+  constructor(private readonly database?: IDatabase) {}
+
+  private async db(): Promise<IDatabase> {
+    return this.database ?? (await getDB());
+  }
+
+  async enqueue(
+    event: EvidenceEventInput,
+    createdAt: number,
+  ): Promise<{ outboxId: string; event: PinnedEvidenceEvent }> {
+    const database = await this.db();
+    const outboxId = crypto.randomUUID();
+    const pinned: PinnedEvidenceEvent = { ...event, id: event.id ?? crypto.randomUUID() };
+    await runWithDbRetry(() =>
+      database.execute(
+        `INSERT INTO learner_evidence_outbox (id, event_json, created_at, attempts, status, last_error)
+         VALUES (?, ?, ?, 0, 'pending', NULL)`,
+        [outboxId, JSON.stringify(pinned), createdAt],
+      ),
+    );
+    return { outboxId, event: pinned };
+  }
+
+  async listPending(limit?: number) {
+    const database = await this.db();
+    const rows = await database.select<Record<string, unknown>>(
+      `SELECT id, event_json, created_at, attempts, status, last_error
+       FROM learner_evidence_outbox
+       WHERE status = 'pending'
+       ORDER BY created_at ASC, id ASC
+       LIMIT ?`,
+      [limit ?? -1],
+    );
+    return rows.map((row) => ({
+      outboxId: String(row.id),
+      event: JSON.parse(String(row.event_json)) as PinnedEvidenceEvent,
+      createdAt: Number(row.created_at),
+      attempts: Number(row.attempts),
+      status: row.status as "pending" | "done",
+      lastError: (row.last_error as string | null) ?? null,
+    }));
+  }
+
+  async markDone(outboxId: string): Promise<void> {
+    const database = await this.db();
+    await runWithDbRetry(() =>
+      database.execute(
+        "UPDATE learner_evidence_outbox SET status = 'done', last_error = NULL WHERE id = ?",
+        [outboxId],
+      ),
+    );
+  }
+
+  async markError(outboxId: string, message: string): Promise<void> {
+    const database = await this.db();
+    await runWithDbRetry(() =>
+      database.execute(
+        "UPDATE learner_evidence_outbox SET attempts = attempts + 1, last_error = ? WHERE id = ?",
+        [message, outboxId],
+      ),
+    );
+  }
+}
+
+export function createSqliteEvidenceOutbox(database?: IDatabase): LearnerEvidenceOutboxStore {
+  return new SqliteEvidenceOutboxStore(database);
 }

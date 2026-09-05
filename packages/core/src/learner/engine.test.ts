@@ -168,6 +168,26 @@ describe("deterministic learner engine", () => {
     );
   });
 
+  it("serializes concurrent events on the same concept: no lost BKT update (PR-012)", async () => {
+    const { deps, stores } = createDeps();
+    const params = { pKnow: 0.3, pLearn: 0.1, pGuess: 0.2, pSlip: 0.1 };
+    let expected = 0.3;
+    for (let i = 0; i < 5; i += 1) expected = updateMastery(params, expected, true, "mc");
+
+    // All five events race: without the learner write lock every cycle would
+    // read the same prior mastery and four of the five BKT updates would be
+    // lost (evidence count 5, mastery after ONE update).
+    await Promise.all(
+      Array.from({ length: 5 }, (_, i) => applyEvidenceEvent(deps, quizInput({ id: `c${i}` }))),
+    );
+
+    expect(stores.events()).toHaveLength(5);
+    expect(stores.logs()).toHaveLength(5);
+    const final = await deps.mastery.get("stats/mean");
+    expect(final?.mastery).toBeCloseTo(expected, 12);
+    expect(final?.evidenceCount).toBe(5);
+  });
+
   it("propagates the source locator for citation back to the canonical source", async () => {
     const { deps, stores } = createDeps();
     await applyEvidenceEvent(

@@ -822,6 +822,22 @@ export async function initDatabase(): Promise<void> {
       completed_at INTEGER
     )
   `);
+      // PR-012: durable evidence outbox — UI-triggered evidence is persisted
+      // here BEFORE it is applied, so a crash between judgement and apply
+      // loses nothing; pending rows replay on next launch (learner/outbox.ts).
+      await database.execute(`
+    CREATE TABLE IF NOT EXISTS learner_evidence_outbox (
+      id TEXT PRIMARY KEY,
+      event_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'pending',
+      last_error TEXT
+    )
+  `);
+      await database.execute(
+        "CREATE INDEX IF NOT EXISTS idx_learner_evidence_outbox_pending ON learner_evidence_outbox(status, created_at)",
+      );
 
       const platform = getPlatformService();
       if (platform.isDesktop) {

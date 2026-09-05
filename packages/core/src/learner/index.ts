@@ -3,6 +3,8 @@ export * from "./bkt";
 export * from "./review";
 export * from "./engine";
 export * from "./stores";
+export * from "./write-lock";
+export * from "./outbox";
 export * from "./evidence-mapping";
 export * from "./sqlite-stores";
 export * from "./placement";
