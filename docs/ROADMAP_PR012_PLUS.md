@@ -64,19 +64,22 @@ this file plus the latest `.codex/PRxxx_STATE_LEDGER.md` to resume.
   append; quiz evidence stamps llm_judged, teaching MCQ deterministic_keyed;
   placement tested-row confidence fixed to 1/15. User-confirmation UI rides
   with PR-016.
-- [ ] **PR-014 — evidence admission authority (graded trust)**: provenance /
-  verification fields on EvidenceEvent; trust weights into the BKT update;
-  quiz LLM-judged evidence down-weighted + unverified; teaching MCQ medium
-  trust; explicit user confirmation upgrades; fix placement "confidence=1 with
-  zero evidence" semantics.
-- [ ] **PR-015 — global concept identity seam (V1)**: concepts / aliases /
-  source_units / concept_relations tables + ConceptId type + lazy registration;
-  legacy book:chapter kept as source-unit; GoalSpec chapter refs route through
-  the mapping (Goal V2 seam).
+  **Merged 2026-09-05 as PR #15** (merge commit `bbbfb1dc`); four required
+  blocking gates PASS on exact head `4518768f` (92 files / 714 tests).
+- [x] **PR-015 — global concept identity seam (V1)** (`feat/pr015-concept-identity`):
+  `learner/concept-identity.ts` (sourceUnitId / parseChapterSourceUnit /
+  ConceptIdentityStore / ensureChapterConceptIdentity) + four additive tables
+  (learner_concepts, learner_concept_aliases, learner_source_units,
+  learner_concept_relations) + lazy registration at quiz evidence / goal start /
+  placement start / mastery overview. V1 identity-preserving: chapter concept
+  id == source-unit id; V2 rebinds via the registry (tested migration path).
+  GoalSpec chapter refs already resolve through concept ids — the V2 seam is
+  the registry, not the goal shape.
 - [ ] **PR-016 — Learning Workspace UI** (feature centerpiece, may split into
   016a wiring + 016b integration): Goal creation (free text → GoalSpec →
   curriculum display) → Teaching session UI → mastery/review via the read
   model, chained inside the Reader aside; cross-book ask entry point;
+  user-confirmation affordance for llm_judged evidence (PR-014 tail);
   UI_UX_GOVERNANCE skills + 7-locale i18n + visual evidence required.
 - [ ] **PR-017 — grounded report contract**: structured CrossBookReport
   {claims, unverified, sources} with mechanically verified EvidenceRefs;
