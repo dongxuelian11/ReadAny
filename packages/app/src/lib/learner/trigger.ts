@@ -92,3 +92,27 @@ export function replayPendingLearnerEvidence(): Promise<EvidenceOutboxDrainRepor
     return drainEvidenceOutbox(deps, createSqliteEvidenceOutbox());
   })();
 }
+
+/** The learner vouches for the quiz verdict (PR-014 tail): records a second,
+ * fully-trusted evidence event derived from the same judgement. The original
+ * llm_judged event keeps its 0.4 weight — the confirmation adds the missing
+ * trust instead of rewriting the append-only ledger. */
+export async function confirmQuizEvidence(
+  judgement: LearningQuizJudgement,
+  source: LearningSourceRef,
+  question: LearningQuizQuestion,
+): Promise<ConceptMastery> {
+  const deps = await createLearnerEngineDeps();
+  const event = quizJudgementToEvidence(judgement, source, question);
+  return applyEvidenceEvent(deps, {
+    id: `${event.id}:confirmed`,
+    conceptId: event.conceptId,
+    source: "MANUAL",
+    taskType: "quiz",
+    questionType: event.questionType,
+    result: event.result,
+    confidence: 1,
+    verification: "user_confirmed",
+    sourceLocator: event.sourceLocator,
+  });
+}

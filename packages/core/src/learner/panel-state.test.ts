@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { currentPlacementItem, initialLearnerPanelState, learnerPanelReducer } from "./panel-state";
+import type { GoalSpec, PersonalCurriculum } from "./goal";
+import {
+  currentPlacementItem,
+  currentTeachingStepView,
+  initialLearnerPanelState,
+  learnerPanelReducer,
+} from "./panel-state";
 import type { PlacementItem, PlacementSession, PlacementVerdict } from "./placement";
+import type { TeachingSession } from "./teaching";
 
 function item(id: string, difficulty: number): PlacementItem {
   return {
@@ -42,6 +49,93 @@ const verdict: PlacementVerdict = {
   masteryWritten: 9,
   perConcept: [],
 };
+
+const goal: GoalSpec = {
+  goalId: "g1",
+  bookId: "b1",
+  goalText: "master the book",
+  restatedGoal: "Master the core chapters",
+  targetCapabilities: ["apply the mean"],
+  chapters: [{ conceptId: "concept-a", title: "Ch1", depth: "working" }],
+  milestones: [],
+  completionCriteria: [],
+  createdAt: 0,
+  active: true,
+};
+
+const curriculum: PersonalCurriculum = {
+  goalId: "g1",
+  bookId: "b1",
+  steps: [
+    {
+      conceptId: "concept-a",
+      title: "Ch1",
+      depth: "working",
+      action: "learn",
+      reason: "r",
+      index: 0,
+    },
+  ],
+  satisfiedCount: 0,
+  gapCount: 1,
+  builtAt: 0,
+};
+
+const teachingContent = {
+  explanation: "A grounded explanation of the chapter.",
+  keyPoints: ["point one", "point two"],
+  workedExample: null,
+  check: {
+    prompt: "check?",
+    options: ["a", "b", "c", "d"],
+    correctIndex: 1,
+    explanation: "b is right",
+  },
+};
+
+function activeTeaching(): TeachingSession {
+  return {
+    id: "t1",
+    goalId: "g1",
+    bookId: "b1",
+    status: "active",
+    steps: [
+      {
+        conceptId: "concept-a",
+        title: "Ch1",
+        action: "learn",
+        content: teachingContent,
+        answered: false,
+        correct: null,
+      },
+      {
+        conceptId: "concept-b",
+        title: "Ch2",
+        action: "learn",
+        content: null,
+        answered: false,
+        correct: null,
+      },
+    ],
+    currentIndex: 0,
+    startedAt: 0,
+    completedAt: null,
+  };
+}
+
+function advanceTeaching(session: TeachingSession, correct: boolean): TeachingSession {
+  const steps = session.steps.map((step, index) =>
+    index === session.currentIndex ? { ...step, answered: true, correct } : step,
+  );
+  const currentIndex = session.currentIndex + 1;
+  return {
+    ...session,
+    steps,
+    currentIndex,
+    status: currentIndex >= steps.length ? "completed" : "active",
+    completedAt: currentIndex >= steps.length ? 1 : null,
+  };
+}
 
 describe("learner panel state", () => {
   it("resets on book change but keeps the tab", () => {
@@ -123,7 +217,7 @@ describe("learner panel state", () => {
     expect(state.error).toBe("boom");
     state = learnerPanelReducer(state, { type: "PLACEMENT_UNAVAILABLE", error: "no endpoint" });
     expect(state.placementPhase).toBe("unavailable");
-    expect(state.tab).toBe("placement");
+    expect(state.tab).toBe("goal");
   });
 
   it("designs the mastery and review list states", () => {
@@ -146,5 +240,116 @@ describe("learner panel state", () => {
     });
     expect(state.reviewPhase).toBe("ready");
     expect(state.dueRows).toHaveLength(1);
+  });
+
+  it("defaults to the goal tab (the workspace entry) and keeps it across resets", () => {
+    expect(initialLearnerPanelState.tab).toBe("goal");
+    let state = learnerPanelReducer(initialLearnerPanelState, {
+      type: "GOAL_READY",
+      goal: goal,
+      curriculum: curriculum,
+      teaching: null,
+    });
+    state = learnerPanelReducer(state, { type: "BOOK_CHANGED", bookId: "b2" });
+    expect(state.tab).toBe("goal");
+    expect(state.goalPhase).toBe("idle");
+    expect(state.goal).toBeNull();
+  });
+
+  it("walks the goal flow: loading → empty → creating → created (teaching reset)", () => {
+    let state = learnerPanelReducer(initialLearnerPanelState, { type: "GOAL_LOADING" });
+    expect(state.goalPhase).toBe("loading");
+
+    state = learnerPanelReducer(state, { type: "GOAL_EMPTY" });
+    expect(state.goalPhase).toBe("empty");
+    expect(state.goal).toBeNull();
+
+    state = learnerPanelReducer(state, { type: "TEACHING_DELIVERED", session: activeTeaching() });
+    expect(state.teachingPhase).toBe("active");
+
+    state = learnerPanelReducer(state, { type: "GOAL_CREATING" });
+    expect(state.goalPhase).toBe("creating");
+
+    state = learnerPanelReducer(state, {
+      type: "GOAL_CREATED",
+      goal: goal,
+      curriculum: curriculum,
+    });
+    expect(state.goalPhase).toBe("ready");
+    expect(state.goal?.goalId).toBe("g1");
+    // A new goal supersedes the old session: teaching resets to idle.
+    expect(state.teaching).toBeNull();
+    expect(state.teachingPhase).toBe("idle");
+  });
+
+  it("walks the teaching flow: start → delivered → answered → next → completed", () => {
+    let state = learnerPanelReducer(initialLearnerPanelState, {
+      type: "GOAL_READY",
+      goal: goal,
+      curriculum: curriculum,
+      teaching: null,
+    });
+    state = learnerPanelReducer(state, { type: "TEACHING_STARTING" });
+    expect(state.teachingPhase).toBe("starting");
+
+    state = learnerPanelReducer(state, { type: "TEACHING_DELIVERING" });
+    expect(state.teachingPhase).toBe("delivering");
+
+    state = learnerPanelReducer(state, { type: "TEACHING_DELIVERED", session: activeTeaching() });
+    expect(state.teachingPhase).toBe("active");
+    const view = currentTeachingStepView(state);
+    expect(view?.step.conceptId).toBe("concept-a");
+    expect(view?.content.check.prompt).toBe("check?");
+
+    state = learnerPanelReducer(state, { type: "TEACHING_ANSWERING" });
+    expect(state.teachingPhase).toBe("answering");
+
+    const advanced = advanceTeaching(activeTeaching(), false);
+    state = learnerPanelReducer(state, {
+      type: "TEACHING_ANSWERED",
+      session: advanced,
+      correct: false,
+      explanation: "why not",
+    });
+    expect(state.teachingPhase).toBe("active");
+    expect(state.lastStepAnswer).toEqual({ correct: false, explanation: "why not" });
+    expect(state.teaching?.currentIndex).toBe(1);
+
+    // Delivering the next step dismisses the previous verdict.
+    state = learnerPanelReducer(state, { type: "TEACHING_DELIVERING" });
+    state = learnerPanelReducer(state, { type: "TEACHING_DELIVERED", session: advanced });
+    expect(state.teachingPhase).toBe("active");
+    expect(state.lastStepAnswer).toBeNull();
+
+    const completed = advanceTeaching(advanced, true);
+    state = learnerPanelReducer(state, {
+      type: "TEACHING_ANSWERED",
+      session: completed,
+      correct: true,
+      explanation: "why",
+    });
+    expect(state.teachingPhase).toBe("completed");
+    expect(state.teaching?.status).toBe("completed");
+    // A completed session offers no live step view.
+    expect(currentTeachingStepView(state)).toBeNull();
+  });
+
+  it("resumes an active teaching session through GOAL_READY and isolates teaching errors", () => {
+    let state = learnerPanelReducer(initialLearnerPanelState, {
+      type: "GOAL_READY",
+      goal: goal,
+      curriculum: curriculum,
+      teaching: activeTeaching(),
+    });
+    expect(state.goalPhase).toBe("ready");
+    expect(state.teachingPhase).toBe("active");
+    expect(currentTeachingStepView(state)?.content.check.prompt).toBe("check?");
+
+    state = learnerPanelReducer(state, { type: "TEACHING_FAILED", error: "model down" });
+    expect(state.teachingPhase).toBe("error");
+    expect(state.teachingError).toBe("model down");
+    // The goal itself is untouched by a teaching failure.
+    expect(state.goalPhase).toBe("ready");
+    expect(state.goal?.goalId).toBe("g1");
   });
 });

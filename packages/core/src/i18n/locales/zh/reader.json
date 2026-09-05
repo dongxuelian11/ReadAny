@@ -196,7 +196,10 @@
       "quiz-active": "本章小测进行中",
       "quiz-complete": "本章小测已完成",
       "error": "学习请求失败；阅读仍可继续"
-    }
+    },
+    "quizConfirm": "我确认这个判定",
+    "quizConfirmed": "已按你的确认计入掌握度（全额权重）",
+    "quizConfirmFailed": "确认记录失败"
   },
   "bookSkill": {
     "title": "本书技能",
@@ -270,7 +273,8 @@
       "label": "学习者板块",
       "placement": "摸底",
       "mastery": "掌握度",
-      "review": "复习"
+      "review": "复习",
+      "goal": "目标"
     },
     "phase": {
       "idle": "先测一测你已经会什么",
@@ -320,6 +324,52 @@
       "stable": "已掌握",
       "needs_review": "需要复习"
     },
-    "backToSource": "返回原文"
+    "backToSource": "返回原文",
+    "goal": {
+      "title": "学习目标",
+      "loading": "正在检查是否有进行中的目标…",
+      "creating": "正在把你的目标变成课程…",
+      "ready": "目标进行中",
+      "empty": "还没有目标",
+      "errorLabel": "目标设置失败；阅读仍可继续",
+      "emptyNote": "写下你想在这本书里达成什么——Agent 会把它变成个人课程，并一步步带你学完。",
+      "inputPlaceholder": "例如：吃透核心章节，并能实际运用其中的概念",
+      "create": "设定目标",
+      "yourGoal": "你的目标",
+      "adjust": "调整目标",
+      "cancel": "取消",
+      "supersedeNote": "新目标会替换当前目标",
+      "plan": "个人课程",
+      "planSummary": "共 {{total}} 步 · 待学 {{gap}} · 已达成 {{satisfied}}",
+      "allSatisfied": "所有章节目标都已达成。可以设定更深入的目标，或继续练习巩固。",
+      "depth": {
+        "familiar": "了解",
+        "working": "掌握",
+        "mastery": "精通"
+      },
+      "stepAction": {
+        "learn": "学习",
+        "review": "复习"
+      },
+      "startTeaching": "开始带读",
+      "reteach": "重新带读"
+    },
+    "teaching": {
+      "title": "Agent 带读",
+      "idleNote": "Agent 会依据章节原文逐步讲解课程中的每一步，并用一道题检验你的理解。",
+      "starting": "正在准备带读会话…",
+      "delivering": "正在撰写本步讲解…",
+      "submitting": "正在记录你的答案…",
+      "retryStep": "重试",
+      "progress": "第 {{current}} / {{total}} 步",
+      "deliver": "生成讲解",
+      "submit": "提交答案",
+      "answered": "下一步",
+      "correct": "回答正确",
+      "incorrect": "还不对",
+      "completed": "带读完成",
+      "completedNote": "每一步都已讲完并作答。掌握度与复习安排已记录你的答案。",
+      "viewMastery": "查看掌握度"
+    }
   }
 }
