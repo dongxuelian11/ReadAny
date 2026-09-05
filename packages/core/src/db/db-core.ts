@@ -846,6 +846,38 @@ export async function initDatabase(): Promise<void> {
       await database.execute(
         "CREATE INDEX IF NOT EXISTS idx_learner_evidence_outbox_pending ON learner_evidence_outbox(status, created_at)",
       );
+      // PR-015: global concept identity seam — the legacy chapter id is now an
+      // explicit source-unit identity; concepts/aliases/relations are the V2
+      // migration surface (learner/concept-identity.ts).
+      await database.execute(`
+    CREATE TABLE IF NOT EXISTS learner_concepts (
+      concept_id TEXT PRIMARY KEY,
+      display_name TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      metadata_json TEXT NOT NULL DEFAULT '{}'
+    )
+  `);
+      await database.execute(`
+    CREATE TABLE IF NOT EXISTS learner_concept_aliases (
+      alias TEXT PRIMARY KEY,
+      concept_id TEXT NOT NULL
+    )
+  `);
+      await database.execute(`
+    CREATE TABLE IF NOT EXISTS learner_source_units (
+      source_unit_id TEXT PRIMARY KEY,
+      concept_id TEXT NOT NULL
+    )
+  `);
+      await database.execute(`
+    CREATE TABLE IF NOT EXISTS learner_concept_relations (
+      concept_id TEXT NOT NULL,
+      related_concept_id TEXT NOT NULL,
+      relation TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (concept_id, related_concept_id, relation)
+    )
+  `);
 
       const platform = getPlatformService();
       if (platform.isDesktop) {

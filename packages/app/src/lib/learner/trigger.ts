@@ -13,9 +13,11 @@ import {
   createSqliteEvidenceOutbox,
   createSqliteLearnerStores,
   drainEvidenceOutbox,
+  ensureChapterConceptIdentity,
   quizJudgementToEvidence,
 } from "@readany/core/learner";
 import type {
+  ConceptIdentityStore,
   ConceptMastery,
   EvidenceOutboxDrainReport,
   LearnerClock,
@@ -31,7 +33,9 @@ const realClock: LearnerClock = {
   now: () => new Date(),
 };
 
-export async function createLearnerEngineDeps(): Promise<LearnerEngineDeps> {
+export async function createLearnerEngineDeps(): Promise<
+  LearnerEngineDeps & { identity: ConceptIdentityStore }
+> {
   return {
     clock: realClock,
     ...createSqliteLearnerStores(),
@@ -50,6 +54,18 @@ export async function recordQuizEvidence(
   const deps = await createLearnerEngineDeps();
   const outbox = createSqliteEvidenceOutbox();
   const event = quizJudgementToEvidence(judgement, source, question);
+  // PR-015: the chapter concept is registered (idempotently) at its first
+  // piece of evidence, so the identity registry stays complete even when the
+  // learner quizzes without ever creating a goal or running placement.
+  await ensureChapterConceptIdentity(
+    deps.identity,
+    {
+      bookId: source.readAnyBookId,
+      chapterIndex: source.location.chapterIndex,
+      title: source.title,
+    },
+    Date.now(),
+  );
   const { outboxId, event: pinned } = await outbox.enqueue(event, Date.now());
   try {
     const result = await applyEvidenceEvent(deps, pinned);

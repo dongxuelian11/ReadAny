@@ -11,6 +11,7 @@ import {
   buildCurriculum,
   classifyGap,
   createSqliteLearnerStores,
+  ensureChapterConceptIdentity,
   getLearnerStateAt,
   parseGoal,
   putGoalWithSupersession,
@@ -36,6 +37,7 @@ async function bookChapters(book: Book) {
   if (skill) {
     return skill.manifest.readany.chapters.map((chapter) => ({
       conceptId: `readany:book:${book.id}:chapter:${chapter.chapterIndex}`,
+      chapterIndex: chapter.chapterIndex,
       title: chapter.title,
     }));
   }
@@ -44,17 +46,29 @@ async function bookChapters(book: Book) {
     .filter((chapter) => chapter.content.trim().length > 0)
     .map((chapter) => ({
       conceptId: `readany:book:${book.id}:chapter:${chapter.index}`,
+      chapterIndex: chapter.index,
       title: chapter.title || `Chapter ${chapter.index + 1}`,
     }));
 }
 
 /** Parse a free-text goal against the book's chapters, persist it as the
- * book's active goal, and build the current curriculum. */
+ * book's active goal, and build the current curriculum. Goal start is also a
+ * concept-identity registration point (PR-015): every chapter target is
+ * lazily registered in the identity registry. */
 export async function startGoalForBook(book: Book, goalText: string): Promise<GoalSpec> {
+  const deps = await createGoalEngineDeps();
   const chapters = await bookChapters(book);
+  await Promise.all(
+    chapters.map((chapter) =>
+      ensureChapterConceptIdentity(
+        deps.identity,
+        { bookId: book.id, chapterIndex: chapter.chapterIndex, title: chapter.title },
+        deps.clock.now().getTime(),
+      ),
+    ),
+  );
   const aiConfig = useSettingsStore.getState().aiConfig;
   const llm: GoalLlmClient = await createBookSkillLlmClient(aiConfig);
-  const deps = await createGoalEngineDeps();
   const parse = await parseGoal({ goalText, bookTitle: book.meta.title, chapters, llm });
   const goal = toGoalSpec({
     parse,
