@@ -8,6 +8,10 @@ export interface BookSkillRegistryEntry {
   contentVersion: string;
   /** ReadAny canonical chapter mapping from the generated manifest. */
   chapters: Array<{ book_number: string; chapterIndex: number; title: string }>;
+  /** Cheap staleness probe (PR-018): the source book file's size + mtime at
+   * generation time. Entries recorded before PR-018 have no fingerprint and
+   * are never reported stale (documented transitional gap). */
+  fileFingerprint?: { size: number; mtimeMs: number };
 }
 
 interface BookSkillRegistryState {

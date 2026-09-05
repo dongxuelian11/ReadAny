@@ -1,11 +1,13 @@
 import { Button } from "@/components/ui/button";
+import { askTheShelf } from "@/lib/book-skill/ask-trigger";
 import {
   deleteBookSkill,
   estimateBookSkillForBook,
   generateBookSkillForBook,
-  loadExistingBookSkill,
+  inspectBookSkill,
 } from "@/lib/book-skill/trigger";
 import { useBookSkillStore } from "@/stores/book-skill-store";
+import { useSettingsStore } from "@/stores/settings-store";
 import {
   BOOK_SKILL_GENRES,
   bookSkillPanelReducer,
@@ -13,8 +15,8 @@ import {
 } from "@readany/core/book-skill";
 import type { BookSkillGenre } from "@readany/core/book-skill";
 import type { Book } from "@readany/core/types";
-import { BookMarked, CircleAlert, CircleCheck, RotateCcw } from "lucide-react";
-import { useEffect, useReducer, useRef } from "react";
+import { BookMarked, CircleAlert, CircleCheck, MessagesSquare, RotateCcw } from "lucide-react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 interface BookSkillPanelProps {
@@ -47,6 +49,7 @@ function formatTokens(tokens: number): string {
 export function BookSkillPanel({ book, onNavigateToChapter }: BookSkillPanelProps) {
   const { t } = useTranslation();
   const [state, dispatch] = useReducer(bookSkillPanelReducer, initialBookSkillPanelState);
+  const aiConfig = useSettingsStore((s) => s.aiConfig);
   const bookRef = useRef(book);
   bookRef.current = book;
 
@@ -55,11 +58,17 @@ export function BookSkillPanel({ book, onNavigateToChapter }: BookSkillPanelProp
     let cancelled = false;
     void (async () => {
       try {
-        const existing = await loadExistingBookSkill(bookRef.current);
+        // PR-018: inspect (load + staleness classification) instead of a blind
+        // load — a skill built from different book content or an older genre
+        // no longer masquerades as current.
+        const inspection = await inspectBookSkill(bookRef.current);
         if (cancelled) return;
-        if (existing) {
-          dispatch({ type: "COMPLETE", result: existing });
+        if (inspection.result && !inspection.staleReason) {
+          dispatch({ type: "COMPLETE", result: inspection.result });
           return;
+        }
+        if (inspection.staleReason) {
+          dispatch({ type: "SKILL_STALE", reason: inspection.staleReason });
         }
         dispatch({ type: "ESTIMATE_LOADING" });
         const estimate = await estimateBookSkillForBook(bookRef.current);
@@ -88,22 +97,33 @@ export function BookSkillPanel({ book, onNavigateToChapter }: BookSkillPanelProp
 
   const genre = useBookSkillStore((s) => s.getGenrePreference(book.id));
 
+  // PR-018 (recorded PR-002 debt): every dispatch below is guarded against a
+  // book switch while the generation is in flight — otherwise the completed
+  // result of book A would land in book B's freshly-reset panel (异步串书).
+  // The store update inside generateBookSkillForBook is keyed to the closure
+  // book and stays correct either way.
   const handleGenerate = async () => {
+    const startedBookId = bookRef.current.id;
     dispatch({ type: "GENERATE_START" });
     try {
-      const result = await generateBookSkillForBook(book, (progress) =>
-        dispatch({ type: "PROGRESS", progress }),
-      );
+      const result = await generateBookSkillForBook(book, (progress) => {
+        if (bookRef.current.id !== startedBookId) return;
+        dispatch({ type: "PROGRESS", progress });
+      });
+      if (bookRef.current.id !== startedBookId) return;
       dispatch({ type: "COMPLETE", result });
     } catch (error) {
+      if (bookRef.current.id !== startedBookId) return;
       dispatch({ type: "ERROR", error: error instanceof Error ? error.message : String(error) });
     }
   };
 
   const handleRetryEstimate = async () => {
+    const startedBookId = bookRef.current.id;
     dispatch({ type: "ESTIMATE_LOADING" });
     try {
-      const estimate = await estimateBookSkillForBook(book);
+      const estimate = await estimateBookSkillForBook(bookRef.current);
+      if (bookRef.current.id !== startedBookId) return;
       dispatch({
         type: "ESTIMATE_READY",
         estimate: {
@@ -113,8 +133,26 @@ export function BookSkillPanel({ book, onNavigateToChapter }: BookSkillPanelProp
         },
       });
     } catch (error) {
+      if (bookRef.current.id !== startedBookId) return;
       dispatch({
         type: "UNAVAILABLE",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
+  const handleAskShelf = async (question: string) => {
+    if (!aiConfig.activeModel) {
+      dispatch({ type: "ASK_ERROR", error: t("learnerPanel.noAiConfig") });
+      return;
+    }
+    dispatch({ type: "ASK_START" });
+    try {
+      const answer = await askTheShelf(question);
+      dispatch({ type: "ASK_READY", answer });
+    } catch (error) {
+      dispatch({
+        type: "ASK_ERROR",
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -185,6 +223,15 @@ export function BookSkillPanel({ book, onNavigateToChapter }: BookSkillPanelProp
             <h2 id="book-skill-estimate-heading" className="text-sm font-semibold">
               {t("bookSkill.estimateTitle")}
             </h2>
+            {state.staleReason && (
+              <div className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-2.5 text-xs leading-5 text-amber-700 dark:text-amber-400">
+                {t(
+                  state.staleReason === "genre-changed"
+                    ? "bookSkill.stale.genre"
+                    : "bookSkill.stale.changed",
+                )}
+              </div>
+            )}
             {state.estimate && (
               <dl className="mt-3 space-y-1.5 text-xs leading-5 text-muted-foreground">
                 <div className="flex justify-between gap-4">
@@ -407,8 +454,133 @@ export function BookSkillPanel({ book, onNavigateToChapter }: BookSkillPanelProp
             </div>
           </div>
         )}
+
+        <AskSection state={state} onAsk={handleAskShelf} />
       </div>
     </div>
+  );
+}
+
+/** Shelf-wide ask (PR-017 contract consumer). Claims are listed with a
+ * mechanical verification badge: verified = every citation resolved against
+ * the installed skills; unverified claims stay visible but flagged. */
+function AskSection({
+  state,
+  onAsk,
+}: {
+  state: ReturnType<typeof bookSkillPanelReducer>;
+  onAsk: (question: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [question, setQuestion] = useState("");
+
+  const submit = () => {
+    if (!question.trim() || state.askPhase === "asking") return;
+    onAsk(question.trim());
+    setQuestion("");
+  };
+
+  return (
+    <section
+      aria-labelledby="book-skill-ask-heading"
+      className="mt-6 border-t border-border/50 pt-4"
+    >
+      <h2 id="book-skill-ask-heading" className="flex items-center gap-1.5 text-sm font-semibold">
+        <MessagesSquare className="h-4 w-4 text-primary" aria-hidden="true" />
+        {t("bookSkill.ask.title")}
+      </h2>
+      <p className="mt-1 text-xs leading-5 text-muted-foreground">{t("bookSkill.ask.note")}</p>
+
+      <textarea
+        rows={2}
+        value={question}
+        onChange={(event) => setQuestion(event.target.value)}
+        placeholder={t("bookSkill.ask.placeholder")}
+        className="mt-3 w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        disabled={state.askPhase === "asking"}
+      />
+      <Button
+        className="mt-2"
+        size="sm"
+        disabled={!question.trim() || state.askPhase === "asking"}
+        onClick={submit}
+      >
+        {t("bookSkill.ask.action")}
+      </Button>
+
+      {state.askPhase === "asking" && (
+        <p className="mt-3 text-xs leading-5 text-muted-foreground">{t("bookSkill.ask.asking")}</p>
+      )}
+
+      {state.askPhase === "error" && (
+        <div className="mt-3">
+          <p className="flex items-start gap-1.5 text-xs leading-5 text-destructive">
+            <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            {state.askError}
+          </p>
+        </div>
+      )}
+
+      {state.askPhase === "ready" && state.askAnswer && (
+        <div className="mt-3 space-y-3">
+          <p className="whitespace-pre-line text-xs leading-5 text-foreground/90">
+            {state.askAnswer.synthesis}
+          </p>
+
+          {state.askAnswer.report.claims.length > 0 && (
+            <div>
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                {t("bookSkill.ask.claims")}
+              </p>
+              <ul className="mt-1 divide-y divide-border/40">
+                {state.askAnswer.report.claims.map((claim, index) => (
+                  <li key={`${index}-${claim.text}`} className="py-2">
+                    <div className="flex items-start gap-1.5">
+                      {claim.verified ? (
+                        <CircleCheck
+                          className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <CircleAlert
+                          className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400"
+                          aria-hidden="true"
+                        />
+                      )}
+                      <span className="min-w-0 text-xs leading-5">{claim.text}</span>
+                    </div>
+                    {claim.refs.length > 0 && (
+                      <div className="ml-5 mt-1 flex flex-wrap gap-1">
+                        {claim.refs.map((ref) => (
+                          <span
+                            key={`${ref.slug}-${ref.bookNumber}`}
+                            className="rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
+                          >
+                            [{ref.slug} {ref.bookNumber}]
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="space-y-1 text-[11px] leading-5 text-muted-foreground">
+            {state.askAnswer.broadcast && <p>{t("bookSkill.ask.broadcast")}</p>}
+            {state.askAnswer.report.failedSlugs.length > 0 && (
+              <p>
+                {t("bookSkill.ask.failed", {
+                  slugs: state.askAnswer.report.failedSlugs.join(", "),
+                })}
+              </p>
+            )}
+            {state.askAnswer.report.claimsUnparsed && <p>{t("bookSkill.ask.unparsed")}</p>}
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 

@@ -258,6 +258,23 @@
       "generating": "正在產生全書技能",
       "ready": "本書技能已就緒",
       "error": "本書技能產生失敗；閱讀仍可繼續"
+    },
+    "stale": {
+      "changed": "產生此 Book Skill 後書籍內容發生了變化——請重新產生以刷新。",
+      "genre": "產生此 Book Skill 後類型偏好發生了變化——重新產生即可套用。"
+    },
+    "ask": {
+      "title": "問問書架",
+      "note": "向書架上所有已產生的 Book Skill 提一個問題。每條論斷都會與真實章節引用機械核對——未通過核對的會被標記。",
+      "placeholder": "你的書們對……怎麼說？",
+      "action": "問問書架",
+      "asking": "正在詢問整個書架…",
+      "claims": "論斷核對",
+      "verified": "已核對",
+      "unverified": "未核對",
+      "broadcast": "沒有書匹配這個問題——已向整個書架廣播。",
+      "failed": "這些書回答失敗，未參與合成：{{slugs}}",
+      "unparsed": "本次回答未通過論斷核對（合成器未按契約返回）。"
     }
   },
   "learnerPanel": {

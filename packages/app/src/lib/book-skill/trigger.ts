@@ -24,6 +24,9 @@ export interface BookSkillEstimateResult {
   existing: boolean;
 }
 
+/** Why a loaded skill was rejected as stale (PR-018). */
+export type BookSkillStaleReason = "book-file-changed" | "genre-changed";
+
 async function resolveSkillDir(bookId: string): Promise<string> {
   const platform = getPlatformService();
   const appData = await platform.getAppDataDir();
@@ -89,14 +92,82 @@ export async function generateBookSkillForBook(
     builtAt: result.manifest.built_at,
     contentVersion: result.manifest.readany.content_version,
     chapters: result.manifest.readany.chapters,
+    fileFingerprint: await bookFileFingerprint(book),
   });
   return result;
 }
 
-/** Load an already-generated skill without any LLM calls; null when absent. */
+/** Cheap staleness probe: the source file's size + mtime (O(1) stat — no
+ * chapter re-extraction). Null when the file cannot be statted; a probe
+ * failure never invalidates a skill on its own. */
+async function bookFileFingerprint(
+  book: Book,
+): Promise<{ size: number; mtimeMs: number } | undefined> {
+  try {
+    const { stat } = await import("@tauri-apps/plugin-fs");
+    const info = await stat(book.filePath);
+    return { size: info.size, mtimeMs: info.mtime?.getTime() ?? 0 };
+  } catch {
+    return undefined;
+  }
+}
+
+/** The loaded skill is stale when the store remembers a different source-file
+ * fingerprint (the book was re-imported or edited) or the user's genre
+ * preference changed after generation. Legacy entries without a fingerprint
+ * are never reported stale (documented transitional gap). */
+
+/** Load an already-generated skill without any LLM calls; null when absent or
+ * STALE (fail-closed: data consumers fall back to canonical extraction rather
+ * than reading a skill built from different book content). */
 export async function loadExistingBookSkill(book: Book): Promise<BookSkillResult | null> {
   const fs = createTauriBookSkillFs();
-  return loadBookSkill(fs, await resolveSkillDir(book.id));
+  const result = await loadBookSkill(fs, await resolveSkillDir(book.id));
+  if (!result) return null;
+  const store = useBookSkillStore.getState();
+  const entry = store.getEntry(book.id);
+  if (entry) {
+    if (entry.genre !== store.getGenrePreference(book.id)) return null;
+    if (entry.fileFingerprint) {
+      const current = await bookFileFingerprint(book);
+      if (
+        current &&
+        (current.size !== entry.fileFingerprint.size ||
+          current.mtimeMs !== entry.fileFingerprint.mtimeMs)
+      ) {
+        return null;
+      }
+    }
+  }
+  return result;
+}
+
+/** Load + staleness classification for the panel: unlike
+ * `loadExistingBookSkill` (which silently hides a stale skill), this reports
+ * WHY the skill is gone so the UI can offer regeneration. */
+export async function inspectBookSkill(book: Book): Promise<{
+  result: BookSkillResult | null;
+  staleReason: BookSkillStaleReason | null;
+}> {
+  const fs = createTauriBookSkillFs();
+  const result = await loadBookSkill(fs, await resolveSkillDir(book.id));
+  if (!result) return { result: null, staleReason: null };
+  const store = useBookSkillStore.getState();
+  const entry = store.getEntry(book.id);
+  if (entry && entry.genre !== store.getGenrePreference(book.id)) {
+    return { result, staleReason: "genre-changed" };
+  }
+  if (entry?.fileFingerprint) {
+    const current = await bookFileFingerprint(book);
+    if (
+      current &&
+      (current.size !== entry.fileFingerprint.size ||
+        current.mtimeMs !== entry.fileFingerprint.mtimeMs)
+    ) {
+      return { result, staleReason: "book-file-changed" };
+    }
+  }
+  return { result, staleReason: null };
 }
 
 export async function deleteBookSkill(bookId: string): Promise<void> {

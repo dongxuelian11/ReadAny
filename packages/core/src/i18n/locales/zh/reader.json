@@ -262,6 +262,23 @@
       "generating": "正在生成全书技能",
       "ready": "本书技能已就绪",
       "error": "本书技能生成失败；阅读仍可继续"
+    },
+    "stale": {
+      "changed": "生成此 Book Skill 后书籍内容发生了变化——请重新生成以刷新。",
+      "genre": "生成此 Book Skill 后类型偏好发生了变化——重新生成即可应用。"
+    },
+    "ask": {
+      "title": "问问书架",
+      "note": "向书架上所有已生成的 Book Skill 提一个问题。每条论断都会与真实章节引用机械核对——未通过核对的会被标记。",
+      "placeholder": "你的书们对……怎么说？",
+      "action": "问问书架",
+      "asking": "正在询问整个书架…",
+      "claims": "论断核对",
+      "verified": "已核对",
+      "unverified": "未核对",
+      "broadcast": "没有书匹配这个问题——已向整个书架广播。",
+      "failed": "这些书回答失败，未参与合成：{{slugs}}",
+      "unparsed": "本次回答未通过论断核对（合成器未按契约返回）。"
     }
   },
   "learnerPanel": {
