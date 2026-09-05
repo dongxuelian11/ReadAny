@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { MASTERY_THRESHOLD, updateMastery } from "./bkt";
-import { applyEvidenceEvent, deriveMasteryStatus, evaluateConceptMastery } from "./engine";
+import {
+  EvidenceNotAdmittedError,
+  applyEvidenceEvent,
+  deriveMasteryStatus,
+  evaluateConceptMastery,
+} from "./engine";
 import type { EvidenceEventInput, LearnerEngineDeps } from "./engine";
 import { DuplicateEvidenceIdError, createInMemoryLearnerStores } from "./stores";
 
@@ -186,6 +191,67 @@ describe("deterministic learner engine", () => {
     const final = await deps.mastery.get("stats/mean");
     expect(final?.mastery).toBeCloseTo(expected, 12);
     expect(final?.evidenceCount).toBe(5);
+  });
+
+  it("admission weights: llm_judged evidence moves mastery at 0.4 of the BKT step (PR-014)", async () => {
+    const { deps } = createDeps();
+    const params = { pKnow: 0.3, pLearn: 0.1, pGuess: 0.2, pSlip: 0.1 };
+    const admitted = updateMastery(params, 0.3, true, "mc");
+    const expected = 0.4 * admitted + 0.6 * 0.3;
+
+    const row = await applyEvidenceEvent(deps, quizInput({ id: "w1", verification: "llm_judged" }));
+    expect(row.mastery).toBeCloseTo(expected, 12);
+    // Less movement than the fully-admitted update, same direction.
+    expect(row.mastery).toBeGreaterThan(0.3);
+    expect(row.mastery).toBeLessThan(admitted);
+  });
+
+  it("admission weights: deterministic_keyed evidence moves mastery at 0.6 of the BKT step", async () => {
+    const { deps } = createDeps();
+    const params = { pKnow: 0.3, pLearn: 0.1, pGuess: 0.2, pSlip: 0.1 };
+    const admitted = updateMastery(params, 0.3, true, "mc");
+    const expected = 0.6 * admitted + 0.4 * 0.3;
+
+    const row = await applyEvidenceEvent(
+      deps,
+      quizInput({ id: "w2", verification: "deterministic_keyed" }),
+    );
+    expect(row.mastery).toBeCloseTo(expected, 12);
+  });
+
+  it("admission weights: user_confirmed evidence carries the full BKT step", async () => {
+    const { deps } = createDeps();
+    const row = await applyEvidenceEvent(
+      deps,
+      quizInput({ id: "w3", verification: "user_confirmed" }),
+    );
+    expect(row.mastery).toBeCloseTo(
+      updateMastery({ pKnow: 0.3, pLearn: 0.1, pGuess: 0.2, pSlip: 0.1 }, 0.3, true, "mc"),
+      12,
+    );
+  });
+
+  it("admission gate: legacy events without verification keep full weight (backcompat)", async () => {
+    const { deps } = createDeps();
+    const row = await applyEvidenceEvent(deps, quizInput({ id: "legacy" }));
+    expect(row.mastery).toBeCloseTo(
+      updateMastery({ pKnow: 0.3, pLearn: 0.1, pGuess: 0.2, pSlip: 0.1 }, 0.3, true, "mc"),
+      12,
+    );
+  });
+
+  it("admission gate: LLM_OBSERVATION without verification is rejected, admitted ones pass", async () => {
+    const { deps, stores } = createDeps();
+    await expect(
+      applyEvidenceEvent(deps, quizInput({ id: "obs-1", source: "LLM_OBSERVATION" })),
+    ).rejects.toBeInstanceOf(EvidenceNotAdmittedError);
+    expect(stores.events()).toHaveLength(0);
+
+    const admitted = await applyEvidenceEvent(
+      deps,
+      quizInput({ id: "obs-2", source: "LLM_OBSERVATION", verification: "user_confirmed" }),
+    );
+    expect(admitted.evidenceCount).toBe(1);
   });
 
   it("propagates the source locator for citation back to the canonical source", async () => {

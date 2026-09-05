@@ -172,6 +172,9 @@ export function teachingEvidence(params: {
     questionType: "mc",
     result: params.correct ? "correct" : "incorrect",
     confidence: 1,
+    // Admission authority (PR-014): grading is deterministic code, but against
+    // an LLM-authored answer key — medium trust.
+    verification: "deterministic_keyed",
   };
 }
 

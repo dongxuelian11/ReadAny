@@ -58,6 +58,10 @@ export function quizJudgementToEvidence(
     taskType: "quiz",
     result: judgement.correct ? "correct" : "incorrect",
     confidence: 1,
+    // Admission authority (PR-014): the quiz question is LLM-generated and the
+    // free-form answer is LLM-judged by the Read-Box sidecar — low trust until
+    // the learner confirms it.
+    verification: "llm_judged",
     sourceLocator: {
       bookId: source.readAnyBookId,
       chapterIndex: source.location.chapterIndex,

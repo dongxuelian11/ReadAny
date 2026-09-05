@@ -725,12 +725,20 @@ export async function initDatabase(): Promise<void> {
       difficulty INTEGER,
       result TEXT NOT NULL,
       confidence REAL NOT NULL,
+      verification TEXT,
       timestamp INTEGER NOT NULL,
       source_book_id TEXT,
       source_chapter_index INTEGER,
       source_cfi TEXT
     )
   `);
+      // PR-014: admission authority — verification column on existing installs
+      // (new installs get it from the CREATE TABLE above).
+      try {
+        await database.execute("ALTER TABLE learner_evidence_events ADD COLUMN verification TEXT");
+      } catch {
+        // Column already exists, ignore
+      }
       await database.execute(
         "CREATE INDEX IF NOT EXISTS idx_learner_evidence_concept ON learner_evidence_events(concept_id, timestamp)",
       );

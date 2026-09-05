@@ -31,6 +31,7 @@ import type {
   EvidenceResult,
   EvidenceSource,
   EvidenceTaskType,
+  EvidenceVerification,
   LearnerEvidenceStore,
   LearnerMasteryStore,
   LearnerReviewCardData,
@@ -58,8 +59,8 @@ export class SqliteLearnerEvidenceStore implements LearnerEvidenceStore {
         database.execute(
           `INSERT INTO learner_evidence_events
             (id, concept_id, source, task_type, question_type, difficulty, result, confidence,
-             timestamp, source_book_id, source_chapter_index, source_cfi)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             verification, timestamp, source_book_id, source_chapter_index, source_cfi)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             event.id,
             event.conceptId,
@@ -69,6 +70,7 @@ export class SqliteLearnerEvidenceStore implements LearnerEvidenceStore {
             event.difficulty ?? null,
             event.result,
             event.confidence,
+            event.verification ?? null,
             event.timestamp,
             event.sourceLocator?.bookId ?? null,
             event.sourceLocator?.chapterIndex ?? null,
@@ -86,7 +88,7 @@ export class SqliteLearnerEvidenceStore implements LearnerEvidenceStore {
     const database = await this.db();
     const rows = await database.select<Record<string, unknown>>(
       `SELECT id, concept_id, source, task_type, question_type, difficulty, result, confidence,
-              timestamp, source_book_id, source_chapter_index, source_cfi
+              verification, timestamp, source_book_id, source_chapter_index, source_cfi
        FROM learner_evidence_events
        WHERE concept_id = ?
        ORDER BY timestamp ASC, id ASC`,
@@ -101,6 +103,7 @@ export class SqliteLearnerEvidenceStore implements LearnerEvidenceStore {
       difficulty: (row.difficulty as 1 | 2 | 3 | null) ?? undefined,
       result: row.result as EvidenceResult,
       confidence: Number(row.confidence),
+      verification: (row.verification as EvidenceVerification | null) ?? undefined,
       timestamp: Number(row.timestamp),
       sourceLocator:
         row.source_book_id === null && row.source_chapter_index === null && row.source_cfi === null
