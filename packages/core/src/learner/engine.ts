@@ -26,6 +26,7 @@ import type {
   LearnerReviewStore,
   MasteryStatus,
 } from "./types";
+import { withLearnerWriteLock } from "./write-lock";
 
 export interface LearnerEngineOptions {
   bkt?: BKTParams;
@@ -77,7 +78,7 @@ export function deriveMasteryStatus(params: {
  *     (correct→Good, incorrect→Again); persist card + log.
  *  4. Recompute confidence, retention, nextReview, and the derived status.
  */
-export async function applyEvidenceEvent(
+async function applyEvidenceEventLocked(
   deps: LearnerEngineDeps,
   input: EvidenceEventInput,
 ): Promise<ConceptMastery> {
@@ -133,10 +134,31 @@ export async function applyEvidenceEvent(
 }
 
 /**
+ * Apply one evidence event under the learner write lock (PR-012): the
+ * read-modify-write cycle above must never interleave with another learner
+ * writer's cycle, or a BKT update is silently lost.
+ */
+export function applyEvidenceEvent(
+  deps: LearnerEngineDeps,
+  input: EvidenceEventInput,
+): Promise<ConceptMastery> {
+  return withLearnerWriteLock(() => applyEvidenceEventLocked(deps, input));
+}
+
+/**
  * Re-evaluate one concept at the current instant without new evidence — this
  * is where forgetting degrades a previously stable concept to NeedsReview.
+ * Also lock-guarded: it rewrites the mastery row and must not interleave with
+ * an evidence apply (a stale overwrite would resurrect an old mastery).
  */
-export async function evaluateConceptMastery(
+export function evaluateConceptMastery(
+  deps: LearnerEngineDeps,
+  conceptId: string,
+): Promise<ConceptMastery | null> {
+  return withLearnerWriteLock(() => evaluateConceptMasteryLocked(deps, conceptId));
+}
+
+async function evaluateConceptMasteryLocked(
   deps: LearnerEngineDeps,
   conceptId: string,
 ): Promise<ConceptMastery | null> {

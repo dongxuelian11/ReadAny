@@ -30,6 +30,7 @@ import type {
   LearnerMasteryStore,
   LearnerReviewStore,
 } from "./types";
+import { withLearnerWriteLock } from "./write-lock";
 
 export interface PlacementEngineDeps {
   clock: LearnerClock;
@@ -47,7 +48,8 @@ export class PlacementPoolTooSmallError extends Error {
 }
 
 /** Start a placement: persist a new active session and mark any previously
- * active sessions abandoned (fail-safe supersession). */
+ * active sessions abandoned (fail-safe supersession). The abandon-then-create
+ * cycle runs under the learner write lock (PR-012). */
 export async function startPlacementSession(
   deps: PlacementEngineDeps,
   items: PlacementItem[],
@@ -56,21 +58,23 @@ export async function startPlacementSession(
     throw new PlacementPoolTooSmallError(items.length, 5);
   }
   const now = deps.clock.now();
-  const active = await deps.placements.getActive();
-  if (active) {
-    await deps.placements.put({ ...active, status: "abandoned", finalizedAt: now.getTime() });
-  }
-  const session: PlacementSession = {
-    id: crypto.randomUUID(),
-    status: "active",
-    theta: PLACEMENT_INITIAL_THETA,
-    startedAt: now.getTime(),
-    finalizedAt: null,
-    items,
-    responses: [],
-  };
-  await deps.placements.put(session);
-  return session;
+  return withLearnerWriteLock(async () => {
+    const active = await deps.placements.getActive();
+    if (active) {
+      await deps.placements.put({ ...active, status: "abandoned", finalizedAt: now.getTime() });
+    }
+    const session: PlacementSession = {
+      id: crypto.randomUUID(),
+      status: "active",
+      theta: PLACEMENT_INITIAL_THETA,
+      startedAt: now.getTime(),
+      finalizedAt: null,
+      items,
+      responses: [],
+    };
+    await deps.placements.put(session);
+    return session;
+  });
 }
 
 /** Load a session by id. */
@@ -131,9 +135,18 @@ export function nextPlacementItem(session: PlacementSession): PlacementItem | nu
  * Finalize a placement: write placement-estimated mastery rows for all pool
  * concepts (guarded — concepts with existing evidence keep their real practice
  * data), append ledger evidence only for actually-answered items, and mark the
- * session completed.
+ * session completed. The guarded read-modify-write sweep runs under the
+ * learner write lock (PR-012); it appends evidence directly rather than
+ * through the locked applyEvidenceEvent, so the lock never nests.
  */
-export async function finalizePlacement(
+export function finalizePlacement(
+  deps: PlacementEngineDeps,
+  session: PlacementSession,
+): Promise<PlacementVerdict> {
+  return withLearnerWriteLock(() => finalizePlacementLocked(deps, session));
+}
+
+async function finalizePlacementLocked(
   deps: PlacementEngineDeps,
   session: PlacementSession,
 ): Promise<PlacementVerdict> {

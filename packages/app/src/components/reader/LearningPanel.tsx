@@ -159,9 +159,11 @@ export function LearningPanel({ book, onNavigateToCitation }: LearningPanelProps
         quizAnswer.trim(),
       );
       dispatch({ type: "QUIZ_JUDGED", judgement });
-      // Fire-and-forget: quiz answers double as learner evidence (PR-005). A
-      // persistence failure must never disrupt the quiz UX.
-      void recordQuizEvidence(judgement, bridge.source).catch((error) =>
+      // Durable-first (PR-012): the judgement is enqueued to the evidence
+      // outbox before it is applied, so a crash or failed write can no longer
+      // silently lose it — pending rows replay on the next launch.
+      // Fire-and-forget still: persistence must never disrupt the quiz UX.
+      void recordQuizEvidence(judgement, bridge.source, currentQuestion).catch((error) =>
         console.error("Failed to record quiz evidence:", error),
       );
     } catch (error) {
