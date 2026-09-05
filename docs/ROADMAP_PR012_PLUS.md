@@ -55,6 +55,15 @@ this file plus the latest `.codex/PRxxx_STATE_LEDGER.md` to resume.
   retrievability decay at read time → status), strictly read-only; wired into
   the mastery overview status chips, the due-review list, the teaching step
   snapshot, and goal gap classification.
+  **Merged 2026-09-05 as PR #14** (merge commit `912282a3`); four required
+  blocking gates PASS on exact head `f2da69d5` (92 files / 708 tests).
+- [x] **PR-014 — evidence admission authority (graded trust)** (`feat/pr014-evidence-admission`):
+  `EvidenceVerification` axis + admission weights (user_confirmed 1.0 /
+  deterministic_keyed 0.6 / llm_judged 0.4 / placement_inferred 0.5) mixed
+  into the BKT posterior; `LLM_OBSERVATION` gate enforced before the ledger
+  append; quiz evidence stamps llm_judged, teaching MCQ deterministic_keyed;
+  placement tested-row confidence fixed to 1/15. User-confirmation UI rides
+  with PR-016.
 - [ ] **PR-014 — evidence admission authority (graded trust)**: provenance /
   verification fields on EvidenceEvent; trust weights into the BKT update;
   quiz LLM-judged evidence down-weighted + unverified; teaching MCQ medium
