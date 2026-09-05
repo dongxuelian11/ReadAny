@@ -8,6 +8,7 @@
 import { applyEvidenceEvent } from "./engine";
 import type { PersonalCurriculum } from "./goal";
 import type { LearnerConceptState } from "./goal";
+import { getLearnerStateAt } from "./read-model";
 import {
   type ChapterTextProvider,
   type TeachingLlmClient,
@@ -179,12 +180,15 @@ export async function answerCurrentStep(
 }
 
 /** Learner-state snapshot for the current step (read-only convenience for the
- * UI owner: shows where mastery stood before this step's evidence). */
+ * UI owner): computed through the current-instant read model (PR-013) so the
+ * displayed status reflects forgetting at the read instant, not the stale
+ * persisted status. Shows where mastery stands before this step's evidence. */
 export async function getStepLearnerState(
   deps: TeachingEngineDeps,
   conceptId: string,
 ): Promise<LearnerConceptState | null> {
-  const row = await deps.mastery.get(conceptId);
+  const [entry] = await getLearnerStateAt(deps, [conceptId]);
+  const row = entry?.state ?? null;
   return row
     ? {
         mastery: row.mastery,
