@@ -7,6 +7,7 @@ import {
   routeSkills,
   selectChaptersForQuestion,
   tokenizeQuestion,
+  verifyClaims,
 } from "./cross-book";
 
 const SKILL_MD_A = `---
@@ -171,5 +172,155 @@ describe("per-book grounded answers and synthesis", () => {
         },
       }),
     ).rejects.toThrow("at least one installed Book Skill");
+  });
+});
+
+describe("grounded report contract (PR-017)", () => {
+  it("mechanically verifies claim refs against installed skills", () => {
+    const bogle = skill("bogle", SKILL_MD_A, [
+      { bookNumber: "ch01", title: "Costs", toolkit: "t" },
+      { bookNumber: "ch02", title: "Allocation", toolkit: "t" },
+    ]);
+    const claims = verifyClaims(
+      [
+        { text: "Fees compound.", refs: [{ slug: "bogle", bookNumber: "ch01" }] },
+        { text: "Ghost book.", refs: [{ slug: "nope", bookNumber: "ch01" }] },
+        { text: "Ghost chapter.", refs: [{ slug: "bogle", bookNumber: "ch99" }] },
+        {
+          text: "Half real.",
+          refs: [
+            { slug: "bogle", bookNumber: "ch02" },
+            { slug: "nope", bookNumber: "ch01" },
+          ],
+        },
+        { text: "No refs at all.", refs: [] },
+      ],
+      [bogle],
+    );
+    expect(claims[0].verified).toBe(true);
+    expect(claims[1].verified).toBe(false);
+    expect(claims[1].refs).toEqual([]);
+    expect(claims[2].verified).toBe(false);
+    expect(claims[3].verified).toBe(false);
+    // Invalid refs are dropped; the surviving one is kept on the claim.
+    expect(claims[3].refs).toEqual([{ slug: "bogle", bookNumber: "ch02" }]);
+    expect(claims[4].verified).toBe(false);
+  });
+
+  it("parses a JSON synthesis into verified claims and keeps the essay", async () => {
+    const bogle = skill("bogle", SKILL_MD_A, [
+      { bookNumber: "ch01", title: "Costs", toolkit: "costs toolkit" },
+    ]);
+    const skills = [bogle, skill("housel", SKILL_MD_B)];
+    const llm = {
+      async complete(system: string) {
+        if (system.includes("ONLY the book")) {
+          return "Fees compound [bogle ch01].";
+        }
+        return JSON.stringify({
+          synthesis: "Fees matter [bogle ch01]. Stay the course.",
+          claims: [
+            { text: "Fees compound against you.", refs: [{ slug: "bogle", bookNumber: "ch01" }] },
+            { text: "Ghost claim.", refs: [{ slug: "bogle", bookNumber: "ch09" }] },
+          ],
+        });
+      },
+    };
+    const answer = await askAcrossBooks({
+      skills,
+      question: "随便聊聊 生命的意义 meaning of life",
+      llm,
+    });
+    expect(answer.synthesis).toBe("Fees matter [bogle ch01]. Stay the course.");
+    expect(answer.report.claimsUnparsed).toBe(false);
+    expect(answer.report.claims).toHaveLength(2);
+    expect(answer.report.claims[0].verified).toBe(true);
+    expect(answer.report.claims[1].verified).toBe(false);
+  });
+
+  it("degrades honestly when the synthesizer ignores the claims contract", async () => {
+    const skills = [skill("bogle", SKILL_MD_A), skill("housel", SKILL_MD_B)];
+    const llm = {
+      async complete(system: string) {
+        return system.includes("ONLY the book")
+          ? "Fees compound [bogle ch01]."
+          : "Plain essay, no JSON.";
+      },
+    };
+    const answer = await askAcrossBooks({ skills, question: "费用 fees", llm });
+    expect(answer.synthesis).toBe("Plain essay, no JSON.");
+    expect(answer.report.claimsUnparsed).toBe(true);
+    expect(answer.report.claims).toEqual([]);
+  });
+
+  it("caps the fan-out to top-k and bounds in-flight grounded calls", async () => {
+    const many = ["a", "b", "c", "d", "e", "f"].map((letter) => skill(letter, SKILL_MD_A));
+    let inFlight = 0;
+    let peak = 0;
+    const llm = {
+      async complete(system: string) {
+        if (system.includes("ONLY the book")) {
+          inFlight += 1;
+          peak = Math.max(peak, inFlight);
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          inFlight -= 1;
+          return "Not out of scope answer";
+        }
+        return "Plain essay.";
+      },
+    };
+    const answer = await askAcrossBooks({
+      skills: many,
+      question: "费用 fees",
+      llm,
+      topK: 2,
+      maxConcurrent: 2,
+    });
+    expect(answer.matchedSlugs).toHaveLength(2);
+    expect(answer.reports).toHaveLength(2);
+    expect(peak).toBe(2);
+  });
+
+  it("survives one failed grounded call (partial failure) and fails closed when all fail", async () => {
+    const skills = [
+      skill("bogle", SKILL_MD_A),
+      skill("housel", SKILL_MD_B),
+      skill("third", SKILL_MD_A),
+    ];
+    const failing = new Set(["housel"]);
+    const llm = {
+      async complete(system: string) {
+        if (system.includes("ONLY the book")) {
+          if (system.includes('"housel"')) {
+            throw new Error("model timeout");
+          }
+          return "Grounded answer [bogle ch01].";
+        }
+        return "Plain essay.";
+      },
+    };
+    const partial = await askAcrossBooks({
+      skills,
+      question: "量子纠缠 quantum entanglement",
+      llm,
+      topK: 3,
+    });
+    expect(partial.report.failedSlugs).toContain("housel");
+    expect(partial.reports).toHaveLength(2);
+
+    const allFailLlm = {
+      async complete(system: string) {
+        if (system.includes("ONLY the book")) throw new Error("down");
+        throw new Error("no synthesis expected");
+      },
+    };
+    await expect(
+      askAcrossBooks({
+        skills,
+        question: "量子纠缠 quantum entanglement",
+        llm: allFailLlm,
+        topK: 3,
+      }),
+    ).rejects.toThrow("All grounded book answers failed");
   });
 });

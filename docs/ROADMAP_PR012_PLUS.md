@@ -77,19 +77,29 @@ this file plus the latest `.codex/PRxxx_STATE_LEDGER.md` to resume.
   the registry, not the goal shape.
   **Merged 2026-09-05 as PR #16** (merge commit `10abeee8`); four required
   blocking gates PASS on exact head `5df17075` (93 files / 718 tests).
-- [ ] **PR-016 — Learning Workspace UI** (feature centerpiece, may split into
-  016a wiring + 016b integration): Goal creation (free text → GoalSpec →
-  curriculum display) → Teaching session UI → mastery/review via the read
-  model, chained inside the Reader aside; cross-book ask entry point;
-  user-confirmation affordance for llm_judged evidence (PR-014 tail);
-  UI_UX_GOVERNANCE skills + 7-locale i18n + visual evidence required.
-- [ ] **PR-017 — grounded report contract**: structured CrossBookReport
-  {claims, unverified, sources} with mechanically verified EvidenceRefs;
-  top-k cap, budget, bounded concurrency, per-book partial failure; turn on
-  semanticRouting in the app (revive PR-011 dead code).
+- [x] **PR-016 — Learning Workspace UI** (`feat/pr016-learning-workspace`):
+  Goal tab (default) with plain-language goal creation → deterministic
+  curriculum display → guided-teaching session flow (deliver/answer/resume/
+  re-teach) wired to goal-trigger/teaching-trigger; quiz verdict confirmation
+  affordance (PR-014 tail, `user_confirmed` additive event); core panel-state
+  goal/teaching reducer; en/zh/zh-TW i18n. UI skills: apple-design +
+  emil-design-eng (per governance). VISUAL_EVIDENCE = NOT_RUN (carry-forward).
+  **Merged 2026-09-06 as PR #17** (merge commit `76660f0a`); four required
+  blocking gates PASS on exact head `8741af4d` (93 files / 722 tests).
+- [x] **PR-017 — grounded report contract (core)** (`feat/pr017-grounded-report`):
+  CrossBookAnswer gains a structured `report` {claims (verified EvidenceRefs),
+  failedSlugs, claimsUnparsed}; synthesis prompt returns STRICT JSON
+  {synthesis, claims} with honest degradation when the model ignores the
+  contract; refs mechanically verified (slug installed + bookNumber exists);
+  top-k cap (default 4), bounded per-book concurrency (default 3), per-book
+  partial failure (all-failed fails closed); askTheShelf enables
+  semanticRouting from 3+ books (revives PR-011 for the hard routing case).
+  Cross-book ask UI lands as the next slice (this PR is core + trigger wiring;
+  no dead contract — the trigger is UI-ready).
 - [ ] **PR-018 — Book Skill cache correctness**: compare contentVersion on
   load; stale marking/rebuild; BookSkillPanel book-switch guard; regenerated
-  dead path.
+  dead path. PLUS: cross-book ask UI surface (consume `answer.report` claims
+  with verified/unverified badges).
 - [x] **PR-019 — GitHub authority** (done ahead of sequence): ruleset 22335539
   on main — PR + 4 required blocking checks + no force push/deletion, no
   bypass; "AI does not self-merge" recorded in the ledgers.
