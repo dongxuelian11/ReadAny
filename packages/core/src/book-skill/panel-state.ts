@@ -2,7 +2,12 @@
 // the chapter-scoped PR-001 learning panel). Every phase must be designed
 // (loading / empty / error / active / completed) and the panel renders only
 // from this state.
+//
+// PR-018: the panel also hosts the shelf-wide "ask the shelf" section — its
+// state rides in this reducer and resets with BOOK_CHANGED (the ask is bound
+// to the panel session, not to any single book).
 
+import type { CrossBookAnswer } from "./cross-book";
 import type { BookSkillCostEstimate } from "./estimate";
 import type { BookSkillGenre, BookSkillProgress, BookSkillResult } from "./types";
 
@@ -15,6 +20,8 @@ export type BookSkillPanelPhase =
   | "ready"
   | "error";
 
+export type BookSkillAskPhase = "idle" | "asking" | "ready" | "error";
+
 export interface BookSkillPanelState {
   phase: BookSkillPanelPhase;
   bookId: string | null;
@@ -23,6 +30,13 @@ export interface BookSkillPanelState {
   progress: BookSkillProgress | null;
   result: BookSkillResult | null;
   error: string | null;
+  /** Set when the loaded skill was built from different book content or an
+   * older genre than the current preference (PR-018 stale-cache debt). */
+  staleReason: "book-file-changed" | "genre-changed" | null;
+  // Shelf-wide ask (PR-017 contract consumer)
+  askPhase: BookSkillAskPhase;
+  askAnswer: CrossBookAnswer | null;
+  askError: string | null;
 }
 
 export type BookSkillPanelAction =
@@ -35,7 +49,11 @@ export type BookSkillPanelAction =
   | { type: "PROGRESS"; progress: BookSkillProgress }
   | { type: "COMPLETE"; result: BookSkillResult }
   | { type: "ERROR"; error: string }
-  | { type: "REGENERATE" };
+  | { type: "REGENERATE" }
+  | { type: "SKILL_STALE"; reason: "book-file-changed" | "genre-changed" }
+  | { type: "ASK_START" }
+  | { type: "ASK_READY"; answer: CrossBookAnswer }
+  | { type: "ASK_ERROR"; error: string };
 
 export const initialBookSkillPanelState: BookSkillPanelState = {
   phase: "idle",
@@ -45,6 +63,10 @@ export const initialBookSkillPanelState: BookSkillPanelState = {
   progress: null,
   result: null,
   error: null,
+  staleReason: null,
+  askPhase: "idle",
+  askAnswer: null,
+  askError: null,
 };
 
 export function bookSkillPanelReducer(
@@ -70,11 +92,25 @@ export function bookSkillPanelReducer(
     case "GENRE_SELECTED":
       return { ...state, genre: action.genre };
     case "GENERATE_START":
-      return { ...state, phase: "generating", progress: null, error: null, result: null };
+      return {
+        ...state,
+        phase: "generating",
+        progress: null,
+        error: null,
+        result: null,
+        staleReason: null,
+      };
     case "PROGRESS":
       return { ...state, phase: "generating", progress: action.progress };
     case "COMPLETE":
-      return { ...state, phase: "ready", result: action.result, progress: null, error: null };
+      return {
+        ...state,
+        phase: "ready",
+        result: action.result,
+        progress: null,
+        error: null,
+        staleReason: null,
+      };
     case "ERROR":
       return { ...state, phase: "error", error: action.error };
     case "REGENERATE":
@@ -85,6 +121,17 @@ export function bookSkillPanelReducer(
         phase: "estimate-ready",
         estimate: state.estimate,
       };
+    case "SKILL_STALE":
+      // The loaded skill does not match the current book/genre: keep the
+      // panel usable (the estimate + regenerate flow takes over) while the
+      // banner explains why the old skill is gone.
+      return { ...state, staleReason: action.reason };
+    case "ASK_START":
+      return { ...state, askPhase: "asking", askError: null };
+    case "ASK_READY":
+      return { ...state, askPhase: "ready", askAnswer: action.answer, askError: null };
+    case "ASK_ERROR":
+      return { ...state, askPhase: "error", askError: action.error };
     default:
       return state;
   }

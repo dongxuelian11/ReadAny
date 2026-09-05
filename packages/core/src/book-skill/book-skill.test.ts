@@ -505,4 +505,46 @@ describe("book skill panel state", () => {
     expect(state.phase).toBe("idle");
     expect(state.bookId).toBe("b2");
   });
+
+  it("records skill staleness and clears it when generation restarts (PR-018)", () => {
+    let state = bookSkillPanelReducer(initialBookSkillPanelState, {
+      type: "SKILL_STALE",
+      reason: "book-file-changed",
+    });
+    expect(state.staleReason).toBe("book-file-changed");
+    // The stale banner rides on top of the estimate/regenerate flow.
+    state = bookSkillPanelReducer(state, {
+      type: "ESTIMATE_READY",
+      estimate: { chapterCount: 3, estimatedInputTokens: 10, estimatedOutputTokens: 20 },
+    });
+    expect(state.staleReason).toBe("book-file-changed");
+    expect(state.phase).toBe("estimate-ready");
+    state = bookSkillPanelReducer(state, { type: "GENERATE_START" });
+    expect(state.staleReason).toBeNull();
+  });
+
+  it("walks the shelf-ask flow and resets it on book change (PR-018)", () => {
+    const answer = {
+      question: "q",
+      matchedSlugs: ["bogle"],
+      broadcast: false,
+      reports: [],
+      droppedSlugs: [],
+      synthesis: "s",
+      report: { claims: [], failedSlugs: [], claimsUnparsed: false },
+    };
+    let state = bookSkillPanelReducer(initialBookSkillPanelState, { type: "ASK_START" });
+    expect(state.askPhase).toBe("asking");
+    state = bookSkillPanelReducer(state, { type: "ASK_ERROR", error: "boom" });
+    expect(state.askPhase).toBe("error");
+    expect(state.askError).toBe("boom");
+    state = bookSkillPanelReducer(state, { type: "ASK_START" });
+    state = bookSkillPanelReducer(state, { type: "ASK_READY", answer });
+    expect(state.askPhase).toBe("ready");
+    expect(state.askAnswer?.synthesis).toBe("s");
+    // The shelf ask is bound to the panel session: a book switch clears it.
+    state = bookSkillPanelReducer(state, { type: "BOOK_CHANGED", bookId: "b2" });
+    expect(state.askPhase).toBe("idle");
+    expect(state.askAnswer).toBeNull();
+  });
 });

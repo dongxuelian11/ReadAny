@@ -262,6 +262,23 @@
       "generating": "Generating the Book Skill",
       "ready": "Book Skill ready",
       "error": "Book Skill generation failed; reading remains available"
+    },
+    "stale": {
+      "changed": "The book's content changed since this skill was generated — regenerate to refresh it.",
+      "genre": "The genre preference changed after this skill was generated — regenerate to apply it."
+    },
+    "ask": {
+      "title": "Ask the shelf",
+      "note": "Ask one question across every generated Book Skill. Each claim is checked against real chapter citations — unverified claims are flagged.",
+      "placeholder": "What do your books collectively say about…?",
+      "action": "Ask the shelf",
+      "asking": "Asking the whole shelf…",
+      "claims": "Claim check",
+      "verified": "verified",
+      "unverified": "unverified",
+      "broadcast": "No book matched the question — it was broadcast to the whole shelf.",
+      "failed": "These books failed to answer and are not part of the synthesis: {{slugs}}",
+      "unparsed": "The synthesizer skipped the claim check for this answer."
     }
   },
   "learnerPanel": {

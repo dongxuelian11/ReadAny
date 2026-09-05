@@ -96,10 +96,24 @@ this file plus the latest `.codex/PRxxx_STATE_LEDGER.md` to resume.
   semanticRouting from 3+ books (revives PR-011 for the hard routing case).
   Cross-book ask UI lands as the next slice (this PR is core + trigger wiring;
   no dead contract — the trigger is UI-ready).
-- [ ] **PR-018 — Book Skill cache correctness**: compare contentVersion on
-  load; stale marking/rebuild; BookSkillPanel book-switch guard; regenerated
-  dead path. PLUS: cross-book ask UI surface (consume `answer.report` claims
-  with verified/unverified badges).
+- [x] **PR-018 — Book Skill cache correctness + ask-the-shelf UI** (`feat/pr018-cache-and-ask`):
+  O(1) stale detection (source-file size+mtime fingerprint recorded at
+  generation; `loadExistingBookSkill` rejects stale skills fail-closed while
+  `inspectBookSkill` reports why → amber regenerate banner in the panel);
+  BookSkillPanel generation/estimate dispatches guarded against mid-flight
+  book switches (异步串书, PR-002 debt); `loadBookSkill` regenerated flag
+  fixed to false (PR-002 dead-path debt); ask-the-shelf UI at the bottom of
+  BookSkillPanel consuming `answer.report` claims with mechanical
+  verified/unverified badges + broadcast/failed/unparsed notes.
+  VISUAL_EVIDENCE = NOT_RUN (carry-forward).
+
+## Final status (2026-09-06): all nine review items addressed at the scoped V1 level
+
+Remaining carry-forwards (non-blocking, recorded in the ledgers): a
+VISUAL_EVIDENCE screenshot pass for the accumulated UI work; curriculum
+`reason` localization (core i18n refactor); concept-identity V2 (cross-book
+merging via the registry); cross-book answer persistence/history.
+
 - [x] **PR-019 — GitHub authority** (done ahead of sequence): ruleset 22335539
   on main — PR + 4 required blocking checks + no force push/deletion, no
   bypass; "AI does not self-merge" recorded in the ledgers.

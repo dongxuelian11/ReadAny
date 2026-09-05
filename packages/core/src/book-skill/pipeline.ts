@@ -390,7 +390,18 @@ export async function loadBookSkill(
           },
     );
   }
-  return { skillDir, regenerated: true, manifest, tier1, spine, chapterLint, warnings: [] };
+  return {
+    skillDir,
+    // PR-018 fix: this is a pure LOAD — nothing was regenerated. The old
+    // `true` made the flag meaningless on the load path (the recorded PR-002
+    // dead-path debt) and misinformed any consumer reasoning about reuse.
+    regenerated: false,
+    manifest,
+    tier1,
+    spine,
+    chapterLint,
+    warnings: [],
+  };
 }
 
 function stubContent(entry: ChapterEntry): string {
