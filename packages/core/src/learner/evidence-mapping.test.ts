@@ -48,6 +48,7 @@ describe("quiz evidence admission mapping", () => {
       taskType: "quiz",
       result: "correct",
       confidence: 1,
+      verification: "llm_judged",
       sourceLocator: { bookId: "book-1", chapterIndex: 3, cfi: "epubcfi(/6/14)" },
     });
     expect(quizJudgementToEvidence(INCORRECT, SOURCE, QUESTION).result).toBe("incorrect");

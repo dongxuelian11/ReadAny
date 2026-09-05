@@ -28,6 +28,7 @@ const EVENT: EvidenceEvent = {
   difficulty: 2,
   result: "correct",
   confidence: 1,
+  verification: "llm_judged",
   timestamp: 1788000000000,
   sourceLocator: { bookId: "book-1", chapterIndex: 3, cfi: "epubcfi(/6/14)" },
 };
@@ -68,6 +69,7 @@ describe("sqlite learner stores", () => {
     expect(execute).toHaveBeenCalledTimes(1);
     const [sql, params] = execute.mock.calls[0];
     expect(sql).toContain("INSERT INTO learner_evidence_events");
+    expect(sql).toContain("verification");
     expect(params).toEqual([
       "ev-1",
       "readany:book:book-1:chapter:3",
@@ -77,11 +79,51 @@ describe("sqlite learner stores", () => {
       2,
       "correct",
       1,
+      "llm_judged",
       1788000000000,
       "book-1",
       3,
       "epubcfi(/6/14)",
     ]);
+  });
+
+  it("round-trips the verification column (null → undefined)", async () => {
+    const { evidence } = createSqliteLearnerStores();
+    select.mockResolvedValueOnce([
+      {
+        id: "ev-1",
+        concept_id: EVENT.conceptId,
+        source: "READ_BOX_QUIZ",
+        task_type: "quiz",
+        question_type: null,
+        difficulty: null,
+        result: "correct",
+        confidence: 1,
+        verification: "llm_judged",
+        timestamp: 1788000000000,
+        source_book_id: null,
+        source_chapter_index: 3,
+        source_cfi: null,
+      },
+      {
+        id: "ev-legacy",
+        concept_id: EVENT.conceptId,
+        source: "REVIEW",
+        task_type: "review",
+        question_type: null,
+        difficulty: null,
+        result: "correct",
+        confidence: 1,
+        verification: null,
+        timestamp: 1788000000001,
+        source_book_id: null,
+        source_chapter_index: null,
+        source_cfi: null,
+      },
+    ]);
+    const events = await evidence.listByConcept(EVENT.conceptId);
+    expect(events[0].verification).toBe("llm_judged");
+    expect(events[1].verification).toBeUndefined();
   });
 
   it("maps unique-constraint failures to DuplicateEvidenceIdError (append-only)", async () => {

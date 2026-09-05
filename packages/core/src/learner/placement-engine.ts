@@ -6,6 +6,7 @@
 // route through applyEvidenceEvent (no BKT re-estimation on top of the theta
 // estimate) and does not create FSRS cards (reviews start with real practice).
 
+import { CONFIDENCE_SATURATION_OBSERVATIONS } from "./bkt";
 import { deriveMasteryStatus } from "./engine";
 import {
   PLACEMENT_INITIAL_THETA,
@@ -186,7 +187,9 @@ async function finalizePlacementLocked(
     const row: ConceptMastery = {
       conceptId: item.conceptId,
       mastery,
-      confidence: tested ? 1 : 0,
+      // PR-014 honesty fix: a tested concept has exactly ONE real evidence
+      // event here, so its evidence-backed confidence is 1/15 — not 1.
+      confidence: tested ? 1 / CONFIDENCE_SATURATION_OBSERVATIONS : 0,
       retention: null,
       transfer: null,
       lastVerified: timestamp,
@@ -221,6 +224,7 @@ async function finalizePlacementLocked(
         taskType: "placement",
         result: response.correct ? "correct" : "incorrect",
         confidence: 1,
+        verification: "placement_inferred",
         timestamp,
       })
       .catch((error) => {

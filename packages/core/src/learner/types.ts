@@ -29,6 +29,19 @@ export type EvidenceQuestionType =
 
 export type EvidenceResult = "correct" | "incorrect";
 
+/**
+ * How the evidence was verified — the admission-authority axis (PR-014).
+ * The weight this evidence carries into BKT is derived from this, not from
+ * the `confidence` field. Absent = legacy unclassified evidence (full weight,
+ * transitional); `llm_judged` evidence is down-weighted; `LLM_OBSERVATION`
+ * events MUST carry an admitted verification or the engine rejects them.
+ */
+export type EvidenceVerification =
+  | "deterministic_keyed"
+  | "llm_judged"
+  | "user_confirmed"
+  | "placement_inferred";
+
 export interface EvidenceSourceLocator {
   bookId?: string;
   chapterIndex?: number;
@@ -50,6 +63,9 @@ export interface EvidenceEvent {
    * references update BKT from the result alone, so this never silently
    * rescales mastery. */
   confidence: number;
+  /** Admission authority (PR-014): how this evidence was verified. Drives the
+   * BKT admission weight; see EvidenceVerification. */
+  verification?: EvidenceVerification;
   /** Epoch millis, supplied by the injected learner clock. */
   timestamp: number;
   sourceLocator?: EvidenceSourceLocator;

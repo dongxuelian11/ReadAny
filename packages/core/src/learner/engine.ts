@@ -20,6 +20,7 @@ import {
 import type {
   ConceptMastery,
   EvidenceEvent,
+  EvidenceVerification,
   LearnerClock,
   LearnerEvidenceStore,
   LearnerMasteryStore,
@@ -42,6 +43,42 @@ export interface LearnerEngineDeps extends LearnerEngineOptions {
 }
 
 export type EvidenceEventInput = Omit<EvidenceEvent, "id" | "timestamp"> & { id?: string };
+
+/** Rejected by the evidence admission gate (PR-014): `LLM_OBSERVATION`
+ * events are candidates only and must carry an explicit verification. */
+export class EvidenceNotAdmittedError extends Error {
+  constructor(conceptId: string) {
+    super(`LLM_OBSERVATION evidence for ${conceptId} was not admitted through a verification gate`);
+    this.name = "EvidenceNotAdmittedError";
+  }
+}
+
+/**
+ * Admission authority (PR-014, graded trust): how much of a BKT update an
+ * evidence event carries, as the probability the evidence is genuine.
+ * `user_confirmed` = the learner vouched for the result; `deterministic_keyed`
+ * = graded by code against a key (the key itself may be LLM-authored — medium
+ * trust); `llm_judged` = an LLM graded free-form output (low trust);
+ * `placement_inferred` = CAT estimate rather than practice. Absent
+ * verification = legacy unclassified evidence at full weight (transitional;
+ * all current producers now stamp a verification).
+ */
+export const ADMISSION_WEIGHTS: Record<EvidenceVerification, number> = {
+  user_confirmed: 1,
+  deterministic_keyed: 0.6,
+  llm_judged: 0.4,
+  placement_inferred: 0.5,
+};
+
+export function admissionWeight(
+  event: Pick<EvidenceEvent, "conceptId" | "source" | "verification">,
+): number {
+  if (event.source === "LLM_OBSERVATION" && !event.verification) {
+    throw new EvidenceNotAdmittedError(event.conceptId);
+  }
+  if (!event.verification) return 1;
+  return ADMISSION_WEIGHTS[event.verification];
+}
 
 /**
  * Derive the display status for a concept at an instant (handoff §11: mastery
@@ -72,8 +109,8 @@ export function deriveMasteryStatus(params: {
  *
  * Order of operations (all fail-closed):
  *  1. Append the event to the ledger (duplicate ids rejected by the store).
- *  2. Load prior mastery (cold start = pKnow) and apply ONE BKT update using
- *     the event's question-type guess/slip.
+ *  2. Load prior mastery (cold start = pKnow) and apply ONE admission-weighted
+ *     BKT update using the event's question-type guess/slip (PR-014).
  *  3. Load or create the concept's FSRS card and apply one review
  *     (correct→Good, incorrect→Again); persist card + log.
  *  4. Recompute confidence, retention, nextReview, and the derived status.
@@ -89,18 +126,25 @@ async function applyEvidenceEventLocked(
     id: input.id ?? crypto.randomUUID(),
     timestamp,
   };
+  // Admission gate BEFORE the ledger append (PR-014): an unadmitted candidate
+  // must not leave a ledger row behind.
+  const weight = admissionWeight(event);
 
   await deps.evidence.append(event);
 
   const params = deps.bkt ?? DEFAULT_BKT_PARAMS;
   const prior = await deps.mastery.get(event.conceptId);
   const priorMastery = prior?.mastery ?? params.pKnow;
-  const mastery = updateMastery(
+  const admitted = updateMastery(
     params,
     priorMastery,
     event.result === "correct",
     event.questionType,
   );
+  // Graded-trust mixture (PR-014): the admission weight λ is the probability
+  // the evidence is genuine, so the posterior is λ·BKT(prior) + (1−λ)·prior.
+  // λ=1 (verified or legacy) reproduces the ported math exactly.
+  const mastery = weight * admitted + (1 - weight) * priorMastery;
 
   const scheduler = createLearnerScheduler({ requestRetention: deps.requestRetention });
   const existingCard = await deps.reviews.getCard(event.conceptId);

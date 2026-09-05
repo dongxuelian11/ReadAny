@@ -167,7 +167,8 @@ describe("placement session lifecycle", () => {
     const chapter0 = await deps.mastery.get(concept(0).conceptId);
     expect(chapter0?.mastery).toBeCloseTo(Math.min(0.4 + session.theta * 0.4, 0.85), 12);
     expect(chapter0?.evidenceCount).toBe(1);
-    expect(chapter0?.confidence).toBe(1);
+    // PR-014 honesty fix: one real evidence event → confidence 1/15, not 1.
+    expect(chapter0?.confidence).toBeCloseTo(1 / 15, 12);
     const chapter3 = await deps.mastery.get(concept(3).conceptId);
     expect(chapter3?.mastery).toBeCloseTo(Math.max(session.theta * 0.3, 0.05), 12);
     // Untested inferred concepts (5..8) — capped at 0.7, no synthetic evidence.
