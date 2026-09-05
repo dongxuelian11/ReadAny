@@ -46,9 +46,15 @@ this file plus the latest `.codex/PRxxx_STATE_LEDGER.md` to resume.
   durable evidence outbox (SQLite + in-memory) with startup replay; app wiring
   (durable-first record, App.tsx startup replay). Evidence-first design: the
   append-only ledger is the journal, mastery is a projection.
-- [ ] **PR-013 — current-instant learner read model**: `getLearnerStateAt(conceptIds, now)`
-  (BKT mastery + FSRS retrievability decay → status); rewire LearnerPanel,
-  overview, goal gap classification; retire stale persisted-status reads.
+  **Merged 2026-09-05 as PR #13** (merge commit `4e506437`); first merge under
+  the new ruleset — all four required blocking gates PASS on exact head
+  `eefa39ff` (quality 4m39s / 91 files 703 tests, NSIS 14m08s, Read-Box 43s,
+  TKG 3m25s; non-gating debt job FAILs as documented baseline).
+- [x] **PR-013 — current-instant learner read model** (`feat/pr013-learner-read-model`):
+  `getLearnerStateAt` / `currentConceptMastery` (BKT mastery + FSRS
+  retrievability decay at read time → status), strictly read-only; wired into
+  the mastery overview status chips, the due-review list, the teaching step
+  snapshot, and goal gap classification.
 - [ ] **PR-014 — evidence admission authority (graded trust)**: provenance /
   verification fields on EvidenceEvent; trust weights into the BKT update;
   quiz LLM-judged evidence down-weighted + unverified; teaching MCQ medium
