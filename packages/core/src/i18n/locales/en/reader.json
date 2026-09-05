@@ -196,7 +196,10 @@
       "quiz-active": "Chapter quiz active",
       "quiz-complete": "Chapter quiz complete",
       "error": "Learning request failed; reading remains available"
-    }
+    },
+    "quizConfirm": "I confirm this verdict",
+    "quizConfirmed": "Recorded as your confirmed verdict — full weight",
+    "quizConfirmFailed": "Could not record the confirmation"
   },
   "bookSkill": {
     "title": "Book Skill",
@@ -270,7 +273,8 @@
       "label": "Learner sections",
       "placement": "Placement",
       "mastery": "Mastery",
-      "review": "Review"
+      "review": "Review",
+      "goal": "Goal"
     },
     "phase": {
       "idle": "Measure what you already know",
@@ -320,6 +324,52 @@
       "stable": "mastered",
       "needs_review": "needs review"
     },
-    "backToSource": "Back to original text"
+    "backToSource": "Back to original text",
+    "goal": {
+      "title": "Learning goal",
+      "loading": "Checking for an active goal…",
+      "creating": "Turning your goal into a curriculum…",
+      "ready": "Goal active",
+      "empty": "No goal yet",
+      "errorLabel": "Goal failed; reading remains available",
+      "emptyNote": "Describe what you want to achieve with this book — the agent turns it into a personal curriculum and teaches it step by step.",
+      "inputPlaceholder": "e.g. Work through the core chapters and be able to apply the concepts",
+      "create": "Set goal",
+      "yourGoal": "Your goal",
+      "adjust": "Adjust goal",
+      "cancel": "Cancel",
+      "supersedeNote": "The new goal replaces the current one",
+      "plan": "Personal curriculum",
+      "planSummary": "{{total}} steps · {{gap}} to work on · {{satisfied}} satisfied",
+      "allSatisfied": "Every chapter target is satisfied. Set a deeper goal or keep practising.",
+      "depth": {
+        "familiar": "familiar",
+        "working": "working",
+        "mastery": "mastery"
+      },
+      "stepAction": {
+        "learn": "learn",
+        "review": "review"
+      },
+      "startTeaching": "Start guided teaching",
+      "reteach": "Teach again"
+    },
+    "teaching": {
+      "title": "Guided teaching",
+      "idleNote": "The agent teaches each curriculum step from the chapter text, then checks your understanding with one question.",
+      "starting": "Preparing the session…",
+      "delivering": "Writing this step's explanation…",
+      "submitting": "Recording your answer…",
+      "retryStep": "Try again",
+      "progress": "Step {{current}} of {{total}}",
+      "deliver": "Generate the explanation",
+      "submit": "Submit answer",
+      "answered": "Next step",
+      "correct": "Correct",
+      "incorrect": "Not quite",
+      "completed": "Teaching complete",
+      "completedNote": "Every step is taught and answered. Mastery and review scheduling have recorded your answers.",
+      "viewMastery": "View mastery"
+    }
   }
 }

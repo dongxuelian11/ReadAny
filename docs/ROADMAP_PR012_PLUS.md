@@ -75,6 +75,8 @@ this file plus the latest `.codex/PRxxx_STATE_LEDGER.md` to resume.
   id == source-unit id; V2 rebinds via the registry (tested migration path).
   GoalSpec chapter refs already resolve through concept ids — the V2 seam is
   the registry, not the goal shape.
+  **Merged 2026-09-05 as PR #16** (merge commit `10abeee8`); four required
+  blocking gates PASS on exact head `5df17075` (93 files / 718 tests).
 - [ ] **PR-016 — Learning Workspace UI** (feature centerpiece, may split into
   016a wiring + 016b integration): Goal creation (free text → GoalSpec →
   curriculum display) → Teaching session UI → mastery/review via the read

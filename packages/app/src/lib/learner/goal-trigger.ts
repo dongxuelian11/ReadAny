@@ -4,6 +4,7 @@
 // state. No UI here; the frontend owner surfaces the results.
 
 import { loadExistingBookSkill } from "@/lib/book-skill/trigger";
+import { getActiveTeaching } from "@/lib/learner/teaching-trigger";
 import { useSettingsStore } from "@/stores/settings-store";
 import { fallbackContentService } from "@readany/core/ai";
 import { createBookSkillLlmClient } from "@readany/core/book-skill";
@@ -22,6 +23,7 @@ import type {
   GoalSpec,
   LearnerConceptState,
   PersonalCurriculum,
+  TeachingSession,
 } from "@readany/core/learner";
 import type { Book } from "@readany/core/types";
 
@@ -112,4 +114,27 @@ export async function getCurriculumForGoal(goal: GoalSpec): Promise<PersonalCurr
     entries.push(classifyGap(chapter, learner));
   }
   return buildCurriculum(goal, entries, deps.clock.now().getTime());
+}
+
+export interface GoalWorkspace {
+  goal: GoalSpec;
+  curriculum: PersonalCurriculum;
+  /** This book's active teaching session, if one is in progress. */
+  teaching: TeachingSession | null;
+}
+
+/** The full goal workspace for a book: active goal + curriculum rebuilt
+ * against the current learner state (PR-013 read model) + any resumable
+ * teaching session. Null when the book has no active goal. */
+export async function getGoalWorkspace(book: Book): Promise<GoalWorkspace | null> {
+  const goal = await getActiveGoal(book);
+  if (!goal) return null;
+  const curriculum = await getCurriculumForGoal(goal);
+  const teaching = await getActiveTeaching();
+  return {
+    goal,
+    curriculum,
+    teaching:
+      teaching && teaching.status === "active" && teaching.bookId === book.id ? teaching : null,
+  };
 }

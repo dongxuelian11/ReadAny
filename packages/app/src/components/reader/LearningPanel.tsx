@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { useReadingContext } from "@/lib/ai/reading-context-service";
-import { recordQuizEvidence } from "@/lib/learner/trigger";
+import { confirmQuizEvidence, recordQuizEvidence } from "@/lib/learner/trigger";
 import {
   answerQuiz,
   askReadBox,
@@ -49,6 +49,12 @@ export function LearningPanel({ book, onNavigateToCitation }: LearningPanelProps
   const [question, setQuestion] = useState("");
   const [quizAnswer, setQuizAnswer] = useState("");
   const [retryKey, setRetryKey] = useState(0);
+  // PR-014 tail: the learner can vouch for the LLM's verdict, upgrading its
+  // admission weight. Tracked outside the core reducer: it is presentation
+  // state for one judgement, reset on the next answer.
+  const [quizConfirmState, setQuizConfirmState] = useState<
+    "idle" | "recording" | "recorded" | "error"
+  >("idle");
   const questionRef = useRef<HTMLTextAreaElement>(null);
   const bookRef = useRef(book);
   const readingContextRef = useRef(readingContext);
@@ -159,6 +165,7 @@ export function LearningPanel({ book, onNavigateToCitation }: LearningPanelProps
         quizAnswer.trim(),
       );
       dispatch({ type: "QUIZ_JUDGED", judgement });
+      setQuizConfirmState("idle");
       // Durable-first (PR-012): the judgement is enqueued to the evidence
       // outbox before it is applied, so a crash or failed write can no longer
       // silently lose it — pending rows replay on the next launch.
@@ -168,6 +175,21 @@ export function LearningPanel({ book, onNavigateToCitation }: LearningPanelProps
       );
     } catch (error) {
       dispatch({ type: "ERROR", error: error instanceof Error ? error.message : String(error) });
+    }
+  };
+
+  const handleConfirmJudgement = async () => {
+    if (quizConfirmState === "recording" || quizConfirmState === "recorded") return;
+    const currentQuestion = state.quizQuestions[state.quizIndex];
+    if (!currentQuestion || !state.quizJudgement) return;
+    setQuizConfirmState("recording");
+    try {
+      const bridge = requireBridge();
+      await confirmQuizEvidence(state.quizJudgement, bridge.source, currentQuestion);
+      setQuizConfirmState("recorded");
+    } catch (error) {
+      console.error("Failed to record confirmed quiz evidence:", error);
+      setQuizConfirmState("error");
     }
   };
 
@@ -439,6 +461,28 @@ export function LearningPanel({ book, onNavigateToCitation }: LearningPanelProps
                     <p className="mt-1 text-sm leading-6 text-muted-foreground">
                       {state.quizJudgement.explanation}
                     </p>
+                    {quizConfirmState !== "recorded" ? (
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={quizConfirmState === "recording"}
+                          onClick={handleConfirmJudgement}
+                        >
+                          <CircleCheck className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                          {t("learning.quizConfirm")}
+                        </Button>
+                        {quizConfirmState === "error" && (
+                          <span className="text-[11px] text-destructive">
+                            {t("learning.quizConfirmFailed")}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-[11px] text-muted-foreground">
+                        {t("learning.quizConfirmed")}
+                      </p>
+                    )}
                     <Button className="mt-3" size="sm" variant="outline" onClick={handleFinishQuiz}>
                       {t("learning.finishQuiz")}
                     </Button>
