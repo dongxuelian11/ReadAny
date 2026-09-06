@@ -182,6 +182,7 @@ describe("sqlite learner stores", () => {
         status: "learning",
         evidence_count: 1,
         updated_at: 1788000000000,
+        last_event_id: "ev-1",
       },
     ]);
     const row = await mastery.get(EVENT.conceptId);
@@ -196,6 +197,7 @@ describe("sqlite learner stores", () => {
       status: "learning",
       evidenceCount: 1,
       updatedAt: 1788000000000,
+      lastEventId: "ev-1",
     });
     select.mockResolvedValueOnce([]);
     await expect(mastery.get("unknown")).resolves.toBeNull();
@@ -210,8 +212,11 @@ describe("sqlite learner stores", () => {
       status: "stable",
       evidenceCount: 8,
       updatedAt: 3,
+      lastEventId: "ev-2",
     });
     expect(execute.mock.calls[0][0]).toContain("INSERT OR REPLACE INTO learner_concept_mastery");
+    // The commit marker rides along with the mastery row.
+    expect(execute.mock.calls[0][1]).toContain("ev-2");
   });
 
   it("round-trips review cards and appends logs", async () => {
@@ -227,13 +232,14 @@ describe("sqlite learner stores", () => {
         lapses: 0,
         state: 2,
         last_review: CARD.lastReview,
+        last_event_id: "ev-1",
       },
     ]);
     const card = await reviews.getCard(CARD.conceptId);
-    expect(card).toEqual(CARD);
+    expect(card).toEqual({ ...CARD, lastEventId: "ev-1" });
     select.mockResolvedValueOnce([]);
     await expect(reviews.getCard("unknown")).resolves.toBeNull();
-    await reviews.putCard(CARD);
+    await reviews.putCard({ ...CARD, lastEventId: "ev-1" });
     expect(execute.mock.calls[0][0]).toContain("INSERT OR REPLACE INTO learner_review_cards");
     await reviews.appendLog(LOG);
     expect(execute.mock.calls[1][0]).toContain("INSERT INTO learner_review_logs");
@@ -247,7 +253,12 @@ describe("sqlite learner stores", () => {
       3,
       0,
       LOG.review,
+      null,
     ]);
+    // A log entry carrying an event id is deduped before the INSERT.
+    select.mockResolvedValueOnce([{ id: 1 }]);
+    await reviews.appendLog({ ...LOG, eventId: "ev-1" });
+    expect(execute.mock.calls[2]).toBeUndefined();
   });
 
   it("uses the injected database when provided instead of the shared connection", async () => {

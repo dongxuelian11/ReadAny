@@ -753,7 +753,8 @@ export async function initDatabase(): Promise<void> {
       next_review INTEGER,
       status TEXT NOT NULL,
       evidence_count INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
+      updated_at INTEGER NOT NULL,
+      last_event_id TEXT
     )
   `);
       await database.execute(`
@@ -766,7 +767,8 @@ export async function initDatabase(): Promise<void> {
       reps INTEGER NOT NULL,
       lapses INTEGER NOT NULL,
       state INTEGER NOT NULL,
-      last_review INTEGER
+      last_review INTEGER,
+      last_event_id TEXT
     )
   `);
       await database.execute(
@@ -784,12 +786,63 @@ export async function initDatabase(): Promise<void> {
       scheduled_days INTEGER NOT NULL,
       learning_steps INTEGER NOT NULL,
       review INTEGER NOT NULL,
+      event_id TEXT,
       UNIQUE(concept_id, review)
     )
   `);
       await database.execute(
         "CREATE INDEX IF NOT EXISTS idx_learner_review_logs_concept ON learner_review_logs(concept_id, review)",
       );
+      // Learner commit markers (iter-1): the engine writes per-event idempotency
+      // markers (last_event_id / event_id) so a partially applied evidence event
+      // resumes instead of being masked as done; see learner/engine.ts. One-time
+      // consistent snapshot before the first marker migration on existing data.
+      try {
+        const markerCols = await database.select<{ n: number }>(
+          "SELECT COUNT(*) AS n FROM pragma_table_info('learner_review_logs') WHERE name = 'event_id'",
+        );
+        if ((markerCols[0]?.n ?? 0) === 0) {
+          const platform = getPlatformService();
+          if (platform.isDesktop) {
+            const backupPath = await getDatabaseFilePath(`${DB_FILENAME}.bak-learner-v2`);
+            // Inline the (escaped) path: VACUUM INTO's target must not exist,
+            // so a second run failing here is expected and swallowed below.
+            await database.execute(
+              `VACUUM INTO '${backupPath.replace(/'/g, "''")}'`,
+            );
+          }
+        }
+      } catch {
+        // Backup is best-effort (e.g. snapshot already exists): never block init.
+      }
+      try {
+        await database.execute(
+          "ALTER TABLE learner_concept_mastery ADD COLUMN last_event_id TEXT",
+        );
+      } catch {
+        // Column already exists, ignore
+      }
+      try {
+        await database.execute("ALTER TABLE learner_review_cards ADD COLUMN last_event_id TEXT");
+      } catch {
+        // Column already exists, ignore
+      }
+      try {
+        await database.execute("ALTER TABLE learner_review_logs ADD COLUMN event_id TEXT");
+      } catch {
+        // Column already exists, ignore
+      }
+      await database.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_learner_review_logs_event ON learner_review_logs(event_id) WHERE event_id IS NOT NULL",
+      );
+      // Evidence confirmation metadata (iter-1): the learner's vouch for a
+      // judged verdict is recorded WITHOUT a second BKT/FSRS apply.
+      await database.execute(`
+    CREATE TABLE IF NOT EXISTS learner_evidence_confirmations (
+      evidence_id TEXT PRIMARY KEY,
+      confirmed_at INTEGER NOT NULL
+    )
+  `);
       await database.execute(`
     CREATE TABLE IF NOT EXISTS learner_placement_sessions (
       id TEXT PRIMARY KEY,

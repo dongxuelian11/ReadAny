@@ -8,8 +8,7 @@
 // apply itself is still kept off the quiz UX's critical path.
 
 import {
-  DuplicateEvidenceIdError,
-  applyEvidenceEvent,
+  applyEvidenceEventResult,
   createSqliteEvidenceOutbox,
   createSqliteLearnerStores,
   drainEvidenceOutbox,
@@ -22,6 +21,7 @@ import type {
   EvidenceOutboxDrainReport,
   LearnerClock,
   LearnerEngineDeps,
+  LearnerEvidenceConfirmationStore,
 } from "@readany/core/learner";
 import type {
   LearningQuizJudgement,
@@ -34,7 +34,10 @@ const realClock: LearnerClock = {
 };
 
 export async function createLearnerEngineDeps(): Promise<
-  LearnerEngineDeps & { identity: ConceptIdentityStore }
+  LearnerEngineDeps & {
+    identity: ConceptIdentityStore;
+    confirmations: LearnerEvidenceConfirmationStore;
+  }
 > {
   return {
     clock: realClock,
@@ -43,17 +46,24 @@ export async function createLearnerEngineDeps(): Promise<
 }
 
 /** Record one judged Read-Box quiz answer as learner evidence. Durable-first:
- * the deterministic event (id pinned from the question content) is persisted
- * to the outbox, applied through the engine, then marked done. If the event
- * was already applied (retry/replay), the stored mastery row is returned. */
+ * the deterministic event (id pinned per ATTEMPT, timestamp pinned at
+ * judgement time) is persisted to the outbox, applied through the engine,
+ * then marked done. The engine apply is resumable: a crash mid-apply replays
+ * the remaining steps exactly once on the next drain. The caller mints one
+ * attemptId per answering occurrence and keeps it for the confirm step; a
+ * NEW attempt at the same question passes a fresh attemptId and counts again,
+ * while re-submitting the same attempt returns the stored mastery. */
 export async function recordQuizEvidence(
   judgement: LearningQuizJudgement,
   source: LearningSourceRef,
   question: LearningQuizQuestion,
+  attemptId: string,
 ): Promise<ConceptMastery> {
   const deps = await createLearnerEngineDeps();
   const outbox = createSqliteEvidenceOutbox();
-  const event = quizJudgementToEvidence(judgement, source, question);
+  // The attemptId is persisted via the outbox enqueue, so retries/replays
+  // reuse the pinned id and never double-apply.
+  const event = quizJudgementToEvidence(judgement, source, question, attemptId);
   // PR-015: the chapter concept is registered (idempotently) at its first
   // piece of evidence, so the identity registry stays complete even when the
   // learner quizzes without ever creating a goal or running placement.
@@ -68,17 +78,13 @@ export async function recordQuizEvidence(
   );
   const { outboxId, event: pinned } = await outbox.enqueue(event, Date.now());
   try {
-    const result = await applyEvidenceEvent(deps, pinned);
+    const result = await applyEvidenceEventResult(deps, pinned);
     await outbox.markDone(outboxId);
-    return result;
+    return result.mastery;
   } catch (error) {
-    if (error instanceof DuplicateEvidenceIdError) {
-      await outbox.markDone(outboxId);
-      const existing = await deps.mastery.get(pinned.conceptId);
-      if (existing) return existing;
-    }
-    // Leave the row pending: the next drain (launch or a later quiz answer)
-    // retries it. The caller decides how loudly to surface the failure.
+    // Any failure here (including a genuine input conflict) leaves the row
+    // pending: the next drain (launch or a later quiz answer) retries it. The
+    // caller decides how loudly to surface the failure.
     throw error;
   }
 }
@@ -93,26 +99,17 @@ export function replayPendingLearnerEvidence(): Promise<EvidenceOutboxDrainRepor
   })();
 }
 
-/** The learner vouches for the quiz verdict (PR-014 tail): records a second,
- * fully-trusted evidence event derived from the same judgement. The original
- * llm_judged event keeps its 0.4 weight — the confirmation adds the missing
- * trust instead of rewriting the append-only ledger. */
+/** The learner vouches for the quiz verdict (PR-014 tail). Since iter-1 this
+ * is pure confirmation metadata: it records that the learner vouched for the
+ * verdict WITHOUT a second evidence event, so confirming never moves BKT or
+ * FSRS a second time. The vouch time is stored next to the event id. */
 export async function confirmQuizEvidence(
   judgement: LearningQuizJudgement,
   source: LearningSourceRef,
   question: LearningQuizQuestion,
-): Promise<ConceptMastery> {
+  attemptId: string,
+): Promise<void> {
   const deps = await createLearnerEngineDeps();
-  const event = quizJudgementToEvidence(judgement, source, question);
-  return applyEvidenceEvent(deps, {
-    id: `${event.id}:confirmed`,
-    conceptId: event.conceptId,
-    source: "MANUAL",
-    taskType: "quiz",
-    questionType: event.questionType,
-    result: event.result,
-    confidence: 1,
-    verification: "user_confirmed",
-    sourceLocator: event.sourceLocator,
-  });
+  const event = quizJudgementToEvidence(judgement, source, question, attemptId);
+  await deps.confirmations.record(event.id, Date.now());
 }

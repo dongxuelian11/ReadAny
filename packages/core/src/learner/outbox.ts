@@ -1,15 +1,14 @@
 // Durable evidence outbox (PR-012) — the write-ahead side of the learner
 // Authority. UI-triggered evidence used to be fire-and-forget: a failed or
 // interrupted persistence silently lost the event. The outbox inverts the
-// order: enqueue a durable row first, apply it through the deterministic
-// engine, then mark it done. Replay is idempotent end to end — deterministic
-// evidence ids (quiz question hash, teaching session:step, placement
-// session:item) make a replayed event hit DuplicateEvidenceIdError, which the
-// drain treats as already applied instead of failed.
+// order: enqueue a durable row first (pinning the event id AND the answer
+// timestamp), apply it through the resumable engine, then mark it done.
+// Since iter-1 the engine apply is idempotent per step via commit markers, so
+// a replay of a partially applied event finishes exactly once instead of the
+// duplicate ledger id masking the missing BKT/FSRS updates as "already done".
 
-import { applyEvidenceEvent } from "./engine";
+import { applyEvidenceEventResult } from "./engine";
 import type { EvidenceEventInput, LearnerEngineDeps } from "./engine";
-import { DuplicateEvidenceIdError } from "./stores";
 
 /** An evidence event whose id is pinned: the outbox assigns one at enqueue
  * time so a replay can never mint a fresh random id and double-apply. */
@@ -52,7 +51,13 @@ export function createInMemoryEvidenceOutbox(): LearnerEvidenceOutboxStore {
   return {
     async enqueue(event, createdAt) {
       const outboxId = crypto.randomUUID();
-      const pinned: PinnedEvidenceEvent = { ...event, id: event.id ?? crypto.randomUUID() };
+      const pinned: PinnedEvidenceEvent = {
+        ...event,
+        id: event.id ?? crypto.randomUUID(),
+        // Pin the answer time at enqueue (iter-1): replays apply with the
+        // original timestamp instead of silently moving to the drain instant.
+        timestamp: event.timestamp ?? createdAt,
+      };
       const entry: LearnerEvidenceOutboxEntry = {
         outboxId,
         event: JSON.parse(JSON.stringify(pinned)) as PinnedEvidenceEvent,
@@ -107,22 +112,20 @@ export async function drainEvidenceOutbox(
       continue;
     }
     try {
-      await applyEvidenceEvent(deps, entry.event);
+      // The engine apply is resumable (iter-1): a duplicate ledger id for the
+      // same attempt resumes the remaining steps instead of masking a partial
+      // apply as done, and `alreadyApplied` is only reported when the commit
+      // markers show the event was FULLY applied before this drain.
+      const result = await applyEvidenceEventResult(deps, entry.event);
       await outbox.markDone(entry.outboxId);
-      report.applied += 1;
+      if (result.alreadyApplied) report.alreadyApplied += 1;
+      else report.applied += 1;
     } catch (error) {
-      if (error instanceof DuplicateEvidenceIdError) {
-        // The ledger is authoritative: the event was already applied (crash
-        // between apply and markDone), so the row is done, not failed.
-        await outbox.markDone(entry.outboxId);
-        report.alreadyApplied += 1;
-      } else {
-        await outbox.markError(
-          entry.outboxId,
-          error instanceof Error ? error.message : String(error),
-        );
-        report.failed += 1;
-      }
+      await outbox.markError(
+        entry.outboxId,
+        error instanceof Error ? error.message : String(error),
+      );
+      report.failed += 1;
     }
   }
   return report;

@@ -91,6 +91,10 @@ export interface ConceptMastery {
   status: MasteryStatus;
   evidenceCount: number;
   updatedAt: number;
+  /** Commit marker (iter-1): id of the evidence event this row already
+   * reflects. Rows written before the marker protocol have no marker; they are
+   * prior state, never treated as an already-applied event. */
+  lastEventId?: string | null;
 }
 
 /** Serializable FSRS card state for one concept (epoch millis; deliberately
@@ -106,6 +110,10 @@ export interface LearnerReviewCardData {
   /** ts-fsrs State enum value (New=0, Learning=1, Review=2, Relearning=3). */
   state: number;
   lastReview: number | null;
+  /** Commit marker (iter-1): id of the evidence event whose FSRS review this
+   * card already reflects. Cards written before the marker protocol have no
+   * marker; they are prior state, never treated as an already-applied event. */
+  lastEventId?: string | null;
 }
 
 /** Serializable FSRS review log (audit trail; append-only like evidence).
@@ -122,6 +130,10 @@ export interface LearnerReviewLogEntry {
   scheduledDays: number;
   learningSteps: number;
   review: number;
+  /** Commit marker (iter-1): the evidence event that produced this review.
+   * Durable adapters key a partial unique index on it so a replayed write is a
+   * no-op; legacy rows have no event id. */
+  eventId?: string | null;
 }
 
 /** Injected wall clock (skillcoco-core pattern) — tests pass a fixed clock. */
@@ -132,6 +144,9 @@ export interface LearnerClock {
 export interface LearnerEvidenceStore {
   /** Append one event; must reject duplicate ids (append-only, never upserted). */
   append(event: EvidenceEvent): Promise<void>;
+  /** One event by id, or null; used to distinguish a replayed append from an
+   * input conflict when the ledger rejects a duplicate id. */
+  getById(id: string): Promise<EvidenceEvent | null>;
   /** All events for a concept, ascending by timestamp. */
   listByConcept(conceptId: string): Promise<EvidenceEvent[]>;
   countByConcept(conceptId: string): Promise<number>;
@@ -148,4 +163,17 @@ export interface LearnerReviewStore {
   appendLog(entry: LearnerReviewLogEntry): Promise<void>;
   /** Cards whose due time is at or before the given epoch millis, ascending by due. */
   listCardsDueBefore(timestamp: number, limit?: number): Promise<LearnerReviewCardData[]>;
+}
+
+/**
+ * Confirmation metadata for evidence the learner vouched for (iter-1). A
+ * confirmation is a pure annotation: it must never produce a second BKT update
+ * or a second FSRS review — those happen once, through the evidence event
+ * itself. Append-only: one row per evidence id.
+ */
+export interface LearnerEvidenceConfirmationStore {
+  /** Record the learner's confirmation of one evidence event (idempotent). */
+  record(evidenceId: string, confirmedAt: number): Promise<void>;
+  /** Confirmation time in epoch millis, or null when not confirmed. */
+  get(evidenceId: string): Promise<number | null>;
 }

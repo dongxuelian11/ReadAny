@@ -12,6 +12,7 @@ import type {
   ConceptMastery,
   EvidenceEvent,
   LearnerClock,
+  LearnerEvidenceConfirmationStore,
   LearnerEvidenceStore,
   LearnerMasteryStore,
   LearnerReviewCardData,
@@ -32,6 +33,7 @@ export interface InMemoryLearnerStores {
   reviews: LearnerReviewStore;
   placements: PlacementStore;
   teachings: TeachingStore;
+  confirmations: LearnerEvidenceConfirmationStore;
   /** Test/inspection surface: current ledger rows in insertion order. */
   events(): EvidenceEvent[];
   logs(): LearnerReviewLogEntry[];
@@ -49,6 +51,10 @@ export function createInMemoryLearnerStores(_clock?: LearnerClock): InMemoryLear
       if (seenIds.has(event.id)) throw new DuplicateEvidenceIdError(event.id);
       seenIds.add(event.id);
       events.push({ ...event });
+    },
+    async getById(id) {
+      const event = events.find((entry) => entry.id === id);
+      return event ? { ...event } : null;
     },
     async listByConcept(conceptId) {
       return events
@@ -80,6 +86,9 @@ export function createInMemoryLearnerStores(_clock?: LearnerClock): InMemoryLear
       cards.set(card.conceptId, { ...card });
     },
     async appendLog(entry) {
+      // Mirror the durable adapter's per-event idempotency: a replayed log
+      // write for an event that already logged its review is a no-op.
+      if (entry.eventId && logs.some((logged) => logged.eventId === entry.eventId)) return;
       logs.push({ ...entry });
     },
     async listCardsDueBefore(timestamp, limit) {
@@ -125,12 +134,23 @@ export function createInMemoryLearnerStores(_clock?: LearnerClock): InMemoryLear
     },
   };
 
+  const confirmationRows = new Map<string, number>();
+  const confirmations: LearnerEvidenceConfirmationStore = {
+    async record(evidenceId, confirmedAt) {
+      if (!confirmationRows.has(evidenceId)) confirmationRows.set(evidenceId, confirmedAt);
+    },
+    async get(evidenceId) {
+      return confirmationRows.get(evidenceId) ?? null;
+    },
+  };
+
   return {
     evidence,
     mastery,
     reviews,
     placements,
     teachings,
+    confirmations,
     events: () => events.map((event) => ({ ...event })),
     logs: () => logs.map((entry) => ({ ...entry })),
   };
