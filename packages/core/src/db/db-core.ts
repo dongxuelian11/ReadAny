@@ -878,6 +878,16 @@ export async function initDatabase(): Promise<void> {
       PRIMARY KEY (concept_id, related_concept_id, relation)
     )
   `);
+      // PR-024: N:M participation — a chapter (source unit) can belong to many
+      // topic concepts and a concept can span many chapters/books. The 1:1
+      // learner_source_units table stays the chapter's owner binding.
+      await database.execute(`
+    CREATE TABLE IF NOT EXISTS learner_concept_participations (
+      concept_id TEXT NOT NULL,
+      source_unit_id TEXT NOT NULL,
+      PRIMARY KEY (concept_id, source_unit_id)
+    )
+  `);
       // PR-020: cross-book ask history — the full grounded report is stored as
       // one JSON row so a past ask can be reopened with its verified claim
       // badges; trimmed to the retention cap on save.

@@ -281,6 +281,12 @@
       "unparsed": "本次回答未通过论断核对（合成器未按契约返回）。",
       "history": "最近提问",
       "rerun": "重新问一次"
+    },
+    "graph": {
+      "title": "跨书概念",
+      "summary": "已注册 {{total}} 个概念 · {{cross}} 个跨书出现",
+      "books": "{{count}} 本书",
+      "empty": "暂无跨书概念——同一术语出现在两本及以上的书后，会在这里汇总。"
     }
   },
   "learnerPanel": {

@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { askTheShelfAndSave, getAskHistory } from "@/lib/book-skill/ask-trigger";
+import { buildConceptGraphForShelf } from "@/lib/book-skill/concept-graph-trigger";
 import {
   deleteBookSkill,
   estimateBookSkillForBook,
@@ -15,7 +16,14 @@ import {
 } from "@readany/core/book-skill";
 import type { BookSkillGenre, StoredAskAnswer } from "@readany/core/book-skill";
 import type { Book } from "@readany/core/types";
-import { BookMarked, CircleAlert, CircleCheck, MessagesSquare, RotateCcw } from "lucide-react";
+import {
+  BookMarked,
+  CircleAlert,
+  CircleCheck,
+  MessagesSquare,
+  Network,
+  RotateCcw,
+} from "lucide-react";
 import { useEffect, useReducer, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -63,6 +71,19 @@ export function BookSkillPanel({ book, onNavigateToChapter }: BookSkillPanelProp
         void getAskHistory()
           .then((entries) => {
             if (!cancelled) dispatch({ type: "ASK_HISTORY_READY", entries });
+          })
+          .catch(() => undefined);
+        // PR-024: fold every shelf skill's Tier-1 into the concept registry
+        // (deterministic, no LLM) and surface the cross-book concepts.
+        void buildConceptGraphForShelf()
+          .then((graph) => {
+            if (!cancelled) {
+              dispatch({
+                type: "CONCEPT_GRAPH_READY",
+                totalConcepts: graph.totalConcepts,
+                crossBook: graph.crossBook,
+              });
+            }
           })
           .catch(() => undefined);
         // PR-018: inspect (load + staleness classification) instead of a blind
@@ -470,8 +491,51 @@ export function BookSkillPanel({ book, onNavigateToChapter }: BookSkillPanelProp
         )}
 
         <AskSection state={state} onAsk={handleAskShelf} onReopenAsk={handleReopenAsk} />
+
+        <ConceptGraphSection state={state} />
       </div>
     </div>
+  );
+}
+
+/** Concept graph V2 (PR-024): the shelf's registered concepts and the
+ * cross-book ones (same normalized concept spanning ≥2 books). Read-only —
+ * the graph is rebuilt deterministically from the skills' Tier-1 data. */
+function ConceptGraphSection({ state }: { state: ReturnType<typeof bookSkillPanelReducer> }) {
+  const { t } = useTranslation();
+  const graph = state.conceptGraph;
+  if (!graph) return null;
+  return (
+    <section
+      aria-labelledby="book-skill-graph-heading"
+      className="mt-6 border-t border-border/50 pt-4"
+    >
+      <h2 id="book-skill-graph-heading" className="flex items-center gap-1.5 text-sm font-semibold">
+        <Network className="h-4 w-4 text-primary" aria-hidden="true" />
+        {t("bookSkill.graph.title")}
+      </h2>
+      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+        {t("bookSkill.graph.summary", {
+          total: graph.totalConcepts,
+          cross: graph.crossBook.length,
+        })}
+      </p>
+      {graph.crossBook.length > 0 && (
+        <ul className="mt-2 divide-y divide-border/40">
+          {graph.crossBook.map((concept) => (
+            <li key={concept.conceptId} className="flex items-center justify-between gap-3 py-2">
+              <span className="min-w-0 truncate text-xs font-medium">{concept.displayName}</span>
+              <span className="shrink-0 text-[11px] text-muted-foreground">
+                {t("bookSkill.graph.books", { count: concept.books.length })}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {graph.crossBook.length === 0 && (
+        <p className="mt-2 text-xs leading-5 text-muted-foreground">{t("bookSkill.graph.empty")}</p>
+      )}
+    </section>
   );
 }
 

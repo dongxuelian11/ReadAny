@@ -39,6 +39,12 @@ export interface ConceptIdentityStore {
   /** Schema-seam write; nothing produces relations in V1. */
   bindRelation(relation: Omit<ConceptRelation, "createdAt">, createdAt: number): Promise<void>;
   listRelated(conceptId: string): Promise<ConceptRelation[]>;
+  /** V2 (PR-024): N:M participation — one chapter (source unit) can belong to
+   * many topic concepts, and one concept spans many chapters/books. Unlike
+   * bindSourceUnit (1:1 owner binding), this never overwrites. */
+  bindConceptSourceUnit(conceptId: string, sourceUnitId: string): Promise<void>;
+  listConceptsForSourceUnit(sourceUnitId: string): Promise<string[]>;
+  listConcepts(): Promise<ConceptRecord[]>;
 }
 
 /** The legacy chapter-scoped identity, now explicit as a SOURCE-UNIT id. */
@@ -76,6 +82,7 @@ export function createInMemoryConceptIdentityStore(): ConceptIdentityStore {
   const sourceUnits = new Map<string, string>();
   const aliases = new Map<string, string>();
   const relations: ConceptRelation[] = [];
+  const participations = new Map<string, Set<string>>(); // sourceUnitId -> conceptIds
   return {
     async registerConcept(concept) {
       if (!concepts.has(concept.conceptId)) {
@@ -106,6 +113,23 @@ export function createInMemoryConceptIdentityStore(): ConceptIdentityStore {
     async listRelated(conceptId) {
       return relations
         .filter((entry) => entry.conceptId === conceptId)
+        .map((entry) => ({ ...entry }));
+    },
+    async bindConceptSourceUnit(conceptId, sourceUnitId) {
+      let set = participations.get(sourceUnitId);
+      if (!set) {
+        set = new Set();
+        participations.set(sourceUnitId, set);
+      }
+      set.add(conceptId);
+    },
+    async listConceptsForSourceUnit(sourceUnitId) {
+      const set = participations.get(sourceUnitId);
+      return set ? [...set].sort() : [];
+    },
+    async listConcepts() {
+      return [...concepts.values()]
+        .sort((a, b) => a.createdAt - b.createdAt || a.conceptId.localeCompare(b.conceptId))
         .map((entry) => ({ ...entry }));
     },
   };
