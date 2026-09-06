@@ -103,6 +103,26 @@ export function derivedAliases(term: string): string[] {
   return [...variants];
 }
 
+/** Add-only alias binding with conflict reporting (iter-3, review item G):
+ * an alias already owned by a DIFFERENT concept is never silently stolen —
+ * the existing binding is kept and the conflict surfaces as a warning. */
+async function bindAliasConflictFree(
+  store: ConceptIdentityStore,
+  alias: string,
+  conceptId: string,
+  warnings: string[],
+): Promise<void> {
+  const existing = await store.resolveByAlias(alias);
+  if (existing === conceptId) return;
+  if (existing) {
+    warnings.push(
+      `Alias "${alias}" already bound to ${existing}; kept, not rebound to ${conceptId}`,
+    );
+    return;
+  }
+  await store.bindAlias(alias, conceptId);
+}
+
 export async function buildConceptGraph(
   skills: ConceptGraphSkillInput[],
   store: ConceptIdentityStore,
@@ -136,10 +156,10 @@ export async function buildConceptGraph(
         topicConceptId(term);
       await store.registerConcept({ conceptId, displayName: term, createdAt: now });
       summary.topicConcepts += 1;
-      await store.bindAlias(term, conceptId);
-      await store.bindAlias(normalized, conceptId);
+      await bindAliasConflictFree(store, term, conceptId, summary.warnings);
+      await bindAliasConflictFree(store, normalized, conceptId, summary.warnings);
       for (const variant of derivedAliases(term)) {
-        await store.bindAlias(variant, conceptId);
+        await bindAliasConflictFree(store, variant, conceptId, summary.warnings);
       }
       for (const bookNumber of entry.chapters) {
         const chapterIndex = chapterIndexByNumber.get(bookNumber);

@@ -95,7 +95,10 @@ export function createInMemoryConceptIdentityStore(): ConceptIdentityStore {
       sourceUnits.set(sourceUnitId, conceptId);
     },
     async bindAlias(alias, conceptId) {
-      aliases.set(alias, conceptId);
+      // Add-only (iter-3, review item G): an alias already owned by a
+      // different concept is never silently stolen — first binding wins.
+      // Callers that need conflict semantics check resolveByAlias first.
+      if (!aliases.has(alias)) aliases.set(alias, conceptId);
     },
     async resolveBySourceUnit(sourceUnitId) {
       return sourceUnits.get(sourceUnitId) ?? null;

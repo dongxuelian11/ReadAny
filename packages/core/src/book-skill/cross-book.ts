@@ -35,13 +35,16 @@ export interface EvidenceRef {
   bookNumber: string;
 }
 
-/** One claim of the grounded report with its supporting refs. `verified` is
- * mechanical: every ref resolved against the installed skills and at least
- * one ref survived. */
+/** One claim of the grounded report with its supporting refs. Iter-3 honesty
+ * rename (review item H): the flag is mechanical CITATION RESOLUTION — every
+ * ref resolved against the skills whose grounded reports actually reached the
+ * synthesis, and at least one ref survived. It proves the citations are
+ * LOCATABLE; it does NOT prove the claim is true. Persisted rows from before
+ * the rename carry `verified` — ask-history normalizes on read. */
 export interface ReportClaim {
   text: string;
   refs: EvidenceRef[];
-  verified: boolean;
+  referencesResolved: boolean;
 }
 
 export interface CrossBookReport {
@@ -286,10 +289,12 @@ function parseSynthesisResponse(raw: string): {
   return { synthesis: shape.synthesis.trim(), claims };
 }
 
-/** Mechanically verify claim refs against the skills that produced the
- * grounded reports: the slug must be installed and the bookNumber must exist
- * in that skill's chapter list. A claim is verified only when EVERY ref
- * resolves and at least one ref survived. */
+/** Mechanically resolve claim refs against a candidate skill set: the slug
+ * must be in the set and the bookNumber must exist in that skill's chapter
+ * list. Iter-3 (review item H): the CALLER decides the candidate set — the
+ * synthesis only ever saw the successful, non-refused reports, so refs into
+ * failed or OUT OF SCOPE books must not resolve. A claim's refs resolve only
+ * when EVERY ref lands in the candidate set and at least one ref survived. */
 export function verifyClaims(
   claims: Array<{ text: string; refs: EvidenceRef[] }>,
   skills: InstalledBookSkill[],
@@ -307,15 +312,16 @@ export function verifyClaims(
     return {
       text: claim.text,
       refs: kept,
-      verified: claim.refs.length > 0 && kept.length === claim.refs.length,
+      referencesResolved: claim.refs.length > 0 && kept.length === claim.refs.length,
     };
   });
 }
 
 /** Route (semantic or keyword), cap to top-k, fan out with bounded
- * concurrency, drop refusals, and synthesize into a verified claim report.
- * One failed per-book call no longer rejects the whole ask (partial failure);
- * all-failed fails closed. */
+ * concurrency, drop refusals, and synthesize into a citation-resolved claim
+ * report (refs resolve only against successful, non-refused sources — iter-3
+ * review item H). One failed per-book call no longer rejects the whole ask
+ * (partial failure); all-failed fails closed. */
 export async function askAcrossBooks(options: AskAcrossBooksOptions): Promise<CrossBookAnswer> {
   if (options.skills.length === 0) {
     throw new Error("Cross-book ask requires at least one installed Book Skill");
@@ -383,8 +389,14 @@ export async function askAcrossBooks(options: AskAcrossBooksOptions): Promise<Cr
   });
   const raw = (await options.llm.complete(synthesisPrompt.system, synthesisPrompt.user)).trim();
   const parsed = parseSynthesisResponse(raw);
+  // Citation resolution only counts sources the synthesis actually saw
+  // (iter-3, review item H): failed and OUT OF SCOPE books never reached the
+  // synthesizer, so a ref into one of them must not resolve.
+  const synthesisSkills = options.skills.filter((skill) =>
+    usable.some((report) => report.slug === skill.slug),
+  );
   const report: CrossBookReport = parsed
-    ? { claims: verifyClaims(parsed.claims, matched), failedSlugs, claimsUnparsed: false }
+    ? { claims: verifyClaims(parsed.claims, synthesisSkills), failedSlugs, claimsUnparsed: false }
     : { claims: [], failedSlugs, claimsUnparsed: true };
   return {
     question: options.question,
