@@ -46,6 +46,9 @@ export interface CurriculumStep {
   depth: TargetDepth;
   action: "learn" | "review";
   reason: string;
+  /** The gap kind this step answers (PR-021): the UI-localized reason is
+   * derived from it — `reason` stays as the English reference text. */
+  kind: GoalGapKind;
   index: number;
 }
 
@@ -136,6 +139,7 @@ export function buildCurriculum(
       title: entry.title,
       depth: entry.depth,
       action: entry.kind === "lapsed" ? "review" : "learn",
+      kind: entry.kind,
       reason:
         entry.kind === "missing"
           ? "not started yet"

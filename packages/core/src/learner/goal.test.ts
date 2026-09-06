@@ -106,6 +106,9 @@ describe("personal curriculum builder (deterministic)", () => {
     expect(curriculum.gapCount).toBe(2);
     expect(curriculum.builtAt).toBe(100);
     expect(curriculum.steps[1].reason).toContain("retention lapsed");
+    // PR-021: the gap kind rides on the step so the UI can localize the
+    // reason (partial → learn, lapsed → review).
+    expect(curriculum.steps.map((step) => step.kind)).toEqual(["partial", "lapsed"]);
   });
 
   it("emits an empty curriculum when everything is satisfied", () => {
