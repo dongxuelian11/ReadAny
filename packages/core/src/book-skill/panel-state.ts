@@ -7,6 +7,7 @@
 // state rides in this reducer and resets with BOOK_CHANGED (the ask is bound
 // to the panel session, not to any single book).
 
+import type { StoredAskAnswer } from "./ask-history";
 import type { CrossBookAnswer } from "./cross-book";
 import type { BookSkillCostEstimate } from "./estimate";
 import type { BookSkillGenre, BookSkillProgress, BookSkillResult } from "./types";
@@ -37,6 +38,8 @@ export interface BookSkillPanelState {
   askPhase: BookSkillAskPhase;
   askAnswer: CrossBookAnswer | null;
   askError: string | null;
+  // Persisted ask history (PR-020), newest first
+  askHistory: StoredAskAnswer[];
 }
 
 export type BookSkillPanelAction =
@@ -53,7 +56,8 @@ export type BookSkillPanelAction =
   | { type: "SKILL_STALE"; reason: "book-file-changed" | "genre-changed" }
   | { type: "ASK_START" }
   | { type: "ASK_READY"; answer: CrossBookAnswer }
-  | { type: "ASK_ERROR"; error: string };
+  | { type: "ASK_ERROR"; error: string }
+  | { type: "ASK_HISTORY_READY"; entries: StoredAskAnswer[] };
 
 export const initialBookSkillPanelState: BookSkillPanelState = {
   phase: "idle",
@@ -67,6 +71,7 @@ export const initialBookSkillPanelState: BookSkillPanelState = {
   askPhase: "idle",
   askAnswer: null,
   askError: null,
+  askHistory: [],
 };
 
 export function bookSkillPanelReducer(
@@ -132,6 +137,8 @@ export function bookSkillPanelReducer(
       return { ...state, askPhase: "ready", askAnswer: action.answer, askError: null };
     case "ASK_ERROR":
       return { ...state, askPhase: "error", askError: action.error };
+    case "ASK_HISTORY_READY":
+      return { ...state, askHistory: action.entries };
     default:
       return state;
   }

@@ -10,3 +10,4 @@ export * from "./panel-state";
 export * from "./llm";
 export * from "./cross-book";
 export * from "./semantic-routing";
+export * from "./ask-history";

@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { askTheShelf } from "@/lib/book-skill/ask-trigger";
+import { askTheShelfAndSave, getAskHistory } from "@/lib/book-skill/ask-trigger";
 import {
   deleteBookSkill,
   estimateBookSkillForBook,
@@ -13,7 +13,7 @@ import {
   bookSkillPanelReducer,
   initialBookSkillPanelState,
 } from "@readany/core/book-skill";
-import type { BookSkillGenre } from "@readany/core/book-skill";
+import type { BookSkillGenre, StoredAskAnswer } from "@readany/core/book-skill";
 import type { Book } from "@readany/core/types";
 import { BookMarked, CircleAlert, CircleCheck, MessagesSquare, RotateCcw } from "lucide-react";
 import { useEffect, useReducer, useRef, useState } from "react";
@@ -58,6 +58,13 @@ export function BookSkillPanel({ book, onNavigateToChapter }: BookSkillPanelProp
     let cancelled = false;
     void (async () => {
       try {
+        // PR-020: persisted shelf-ask history is shelf-wide; reload it with
+        // the panel session (BOOK_CHANGED above just cleared it).
+        void getAskHistory()
+          .then((entries) => {
+            if (!cancelled) dispatch({ type: "ASK_HISTORY_READY", entries });
+          })
+          .catch(() => undefined);
         // PR-018: inspect (load + staleness classification) instead of a blind
         // load — a skill built from different book content or an older genre
         // no longer masquerades as current.
@@ -148,14 +155,21 @@ export function BookSkillPanel({ book, onNavigateToChapter }: BookSkillPanelProp
     }
     dispatch({ type: "ASK_START" });
     try {
-      const answer = await askTheShelf(question);
+      // PR-020: the full grounded report is persisted and the refreshed
+      // history comes back with the answer.
+      const { answer, history } = await askTheShelfAndSave(question);
       dispatch({ type: "ASK_READY", answer });
+      dispatch({ type: "ASK_HISTORY_READY", entries: history });
     } catch (error) {
       dispatch({
         type: "ASK_ERROR",
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  };
+
+  const handleReopenAsk = (entry: StoredAskAnswer) => {
+    dispatch({ type: "ASK_READY", answer: entry.answer });
   };
 
   const handleDelete = async () => {
@@ -455,7 +469,7 @@ export function BookSkillPanel({ book, onNavigateToChapter }: BookSkillPanelProp
           </div>
         )}
 
-        <AskSection state={state} onAsk={handleAskShelf} />
+        <AskSection state={state} onAsk={handleAskShelf} onReopenAsk={handleReopenAsk} />
       </div>
     </div>
   );
@@ -463,13 +477,16 @@ export function BookSkillPanel({ book, onNavigateToChapter }: BookSkillPanelProp
 
 /** Shelf-wide ask (PR-017 contract consumer). Claims are listed with a
  * mechanical verification badge: verified = every citation resolved against
- * the installed skills; unverified claims stay visible but flagged. */
+ * the installed skills; unverified claims stay visible but flagged. History
+ * (PR-020) reopens past asks with their exact verified/unverified badges. */
 function AskSection({
   state,
   onAsk,
+  onReopenAsk,
 }: {
   state: ReturnType<typeof bookSkillPanelReducer>;
   onAsk: (question: string) => void;
+  onReopenAsk: (entry: StoredAskAnswer) => void;
 }) {
   const { t } = useTranslation();
   const [question, setQuestion] = useState("");
@@ -578,6 +595,30 @@ function AskSection({
             )}
             {state.askAnswer.report.claimsUnparsed && <p>{t("bookSkill.ask.unparsed")}</p>}
           </div>
+        </div>
+      )}
+
+      {state.askHistory.length > 0 && (
+        <div className="mt-4">
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            {t("bookSkill.ask.history")}
+          </p>
+          <ul className="mt-1 divide-y divide-border/40">
+            {state.askHistory.map((entry) => (
+              <li key={entry.id}>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between gap-2 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => onReopenAsk(entry)}
+                >
+                  <span className="min-w-0 truncate text-xs">{entry.question}</span>
+                  <span className="shrink-0 text-[11px] text-muted-foreground">
+                    {new Date(entry.createdAt).toLocaleDateString()}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </section>

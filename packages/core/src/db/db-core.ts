@@ -878,6 +878,20 @@ export async function initDatabase(): Promise<void> {
       PRIMARY KEY (concept_id, related_concept_id, relation)
     )
   `);
+      // PR-020: cross-book ask history — the full grounded report is stored as
+      // one JSON row so a past ask can be reopened with its verified claim
+      // badges; trimmed to the retention cap on save.
+      await database.execute(`
+    CREATE TABLE IF NOT EXISTS book_skill_ask_history (
+      id TEXT PRIMARY KEY,
+      question TEXT NOT NULL,
+      answer_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    )
+  `);
+      await database.execute(
+        "CREATE INDEX IF NOT EXISTS idx_book_skill_ask_history_created ON book_skill_ask_history(created_at)",
+      );
 
       const platform = getPlatformService();
       if (platform.isDesktop) {

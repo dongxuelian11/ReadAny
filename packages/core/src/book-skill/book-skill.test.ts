@@ -542,9 +542,15 @@ describe("book skill panel state", () => {
     state = bookSkillPanelReducer(state, { type: "ASK_READY", answer });
     expect(state.askPhase).toBe("ready");
     expect(state.askAnswer?.synthesis).toBe("s");
+    state = bookSkillPanelReducer(state, {
+      type: "ASK_HISTORY_READY",
+      entries: [{ id: "a1", question: "q", createdAt: 1, answer }],
+    });
+    expect(state.askHistory).toHaveLength(1);
     // The shelf ask is bound to the panel session: a book switch clears it.
     state = bookSkillPanelReducer(state, { type: "BOOK_CHANGED", bookId: "b2" });
     expect(state.askPhase).toBe("idle");
     expect(state.askAnswer).toBeNull();
+    expect(state.askHistory).toEqual([]);
   });
 });
