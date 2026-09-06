@@ -1,8 +1,8 @@
 # ReadAny：源码审查与快速可用开发计划
 
-审查日期：2026-09-06  
-仓库：dongxuelian11/ReadAny  
-审查基线：`e25b7d2f36de6a817d79898f5c25f9a8685dcfc0`（main，合入 PR #26）  
+审查日期：2026-09-06
+仓库：dongxuelian11/ReadAny
+审查基线：`e25b7d2f36de6a817d79898f5c25f9a8685dcfc0`（main，合入 PR #26）
 对比基线：`79c9e2a8c541d958cf8a22e09963717c23460de3`
 
 ## 结论
