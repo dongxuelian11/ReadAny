@@ -370,7 +370,13 @@
         "review": "review"
       },
       "startTeaching": "Start guided teaching",
-      "reteach": "Teach again"
+      "reteach": "Teach again",
+      "reason": {
+        "missing": "not started yet",
+        "partial": "started but below the target depth",
+        "lapsed": "learned before but retention lapsed",
+        "satisfied": "target reached"
+      }
     },
     "teaching": {
       "title": "Guided teaching",

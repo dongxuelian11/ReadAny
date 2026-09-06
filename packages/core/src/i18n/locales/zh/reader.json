@@ -370,7 +370,13 @@
         "review": "复习"
       },
       "startTeaching": "开始带读",
-      "reteach": "重新带读"
+      "reteach": "重新带读",
+      "reason": {
+        "missing": "还没开始",
+        "partial": "已开始但未达目标深度",
+        "lapsed": "之前学过但记忆已衰退",
+        "satisfied": "已达标"
+      }
     },
     "teaching": {
       "title": "Agent 带读",

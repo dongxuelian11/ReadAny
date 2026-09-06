@@ -901,8 +901,8 @@ function GoalTab({
                     <span className="min-w-0">
                       <span className="block truncate text-xs font-medium">{step.title}</span>
                       <span className="text-[11px] text-muted-foreground">
+                        {t(`learnerPanel.goal.reason.${step.kind}`)} ·{" "}
                         {t(`learnerPanel.goal.depth.${step.depth}`)}
-                        {chapterIndex !== null && " · "}
                       </span>
                     </span>
                     <span

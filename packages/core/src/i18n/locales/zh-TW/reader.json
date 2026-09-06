@@ -366,7 +366,13 @@
         "review": "複習"
       },
       "startTeaching": "開始帶讀",
-      "reteach": "重新帶讀"
+      "reteach": "重新帶讀",
+      "reason": {
+        "missing": "還沒開始",
+        "partial": "已開始但未達目標深度",
+        "lapsed": "之前學過但記憶已衰退",
+        "satisfied": "已達標"
+      }
     },
     "teaching": {
       "title": "Agent 帶讀",
