@@ -279,7 +279,8 @@
       "broadcast": "No book matched the question — it was broadcast to the whole shelf.",
       "failed": "These books failed to answer and are not part of the synthesis: {{slugs}}",
       "unparsed": "The synthesizer skipped the claim check for this answer.",
-      "history": "Recent asks"
+      "history": "Recent asks",
+      "rerun": "Ask again"
     }
   },
   "learnerPanel": {

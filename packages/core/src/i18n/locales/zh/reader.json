@@ -279,7 +279,8 @@
       "broadcast": "没有书匹配这个问题——已向整个书架广播。",
       "failed": "这些书回答失败，未参与合成：{{slugs}}",
       "unparsed": "本次回答未通过论断核对（合成器未按契约返回）。",
-      "history": "最近提问"
+      "history": "最近提问",
+      "rerun": "重新问一次"
     }
   },
   "learnerPanel": {

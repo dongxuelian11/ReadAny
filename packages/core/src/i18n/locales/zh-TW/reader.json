@@ -275,7 +275,8 @@
       "broadcast": "沒有書匹配這個問題——已向整個書架廣播。",
       "failed": "這些書回答失敗，未參與合成：{{slugs}}",
       "unparsed": "本次回答未通過論斷核對（合成器未按契約返回）。",
-      "history": "最近提問"
+      "history": "最近提問",
+      "rerun": "重新問一次"
     }
   },
   "learnerPanel": {
