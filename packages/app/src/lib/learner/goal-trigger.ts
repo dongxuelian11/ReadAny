@@ -14,6 +14,8 @@ import {
   createSqliteLearnerStores,
   ensureChapterConceptIdentity,
   getLearnerStateAt,
+  orderStepsByPrerequisites,
+  parseChapterSourceUnit,
   parseGoal,
   putGoalWithSupersession,
   toGoalSpec,
@@ -113,7 +115,29 @@ export async function getCurriculumForGoal(goal: GoalSpec): Promise<PersonalCurr
       : null;
     entries.push(classifyGap(chapter, learner));
   }
-  return buildCurriculum(goal, entries, deps.clock.now().getTime());
+  const curriculum = buildCurriculum(goal, entries, deps.clock.now().getTime());
+  // PR-026: prerequisite-aware reordering — mine the concept registry for
+  // "chapter A participates in a concept that requires chapter B's concept"
+  // pairs restricted to this goal's chapters, then let the pure core
+  // topological reorder run (book order preserved otherwise).
+  const chapterIndexes = new Set(
+    goal.chapters
+      .map((chapter) => parseChapterSourceUnit(chapter.conceptId)?.chapterIndex)
+      .filter((index): index is number => index !== undefined),
+  );
+  const edges: Array<{ before: number; after: number }> = [];
+  for (const chapter of goal.chapters) {
+    const after = parseChapterSourceUnit(chapter.conceptId)?.chapterIndex;
+    if (after === undefined) continue;
+    for (const conceptId of await deps.identity.listConceptsForSourceUnit(chapter.conceptId)) {
+      for (const unit of await deps.identity.listSourceUnitsForConcept(conceptId)) {
+        const before = parseChapterSourceUnit(unit)?.chapterIndex;
+        if (before === undefined || before === after || !chapterIndexes.has(before)) continue;
+        edges.push({ before, after });
+      }
+    }
+  }
+  return { ...curriculum, steps: orderStepsByPrerequisites(curriculum.steps, edges) };
 }
 
 export interface GoalWorkspace {

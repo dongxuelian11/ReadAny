@@ -96,6 +96,34 @@ describe("concept graph V2", () => {
     expect(cross[0].books).toEqual(["book-1", "book-2"]);
   });
 
+  it("merges across languages via derived aliases: 「费用 fees」 folds in FEES and 费用 (PR-026)", async () => {
+    const store = createInMemoryConceptIdentityStore();
+    const skills = [
+      skillInput("book-1", { topicIndex: [{ term: "费用 fees", chapters: ["ch01"] }] }),
+      skillInput("book-2", { topicIndex: [{ term: "FEES", chapters: ["ch01"] }] }, [
+        { book_number: "ch01", chapterIndex: 0 },
+      ]),
+      skillInput("book-3", { topicIndex: [{ term: "费用", chapters: ["ch01"] }] }, [
+        { book_number: "ch01", chapterIndex: 0 },
+      ]),
+    ];
+    await buildConceptGraph(skills, store, NOW);
+
+    // All three terms fold into ONE concept: the bilingual term's derived
+    // aliases 「费用」/fees answer the later books.
+    const topicConcepts = await store
+      .listConcepts()
+      .then((all) => all.filter((concept) => concept.conceptId.includes(":t:")));
+    expect(topicConcepts).toHaveLength(1);
+    expect(topicConcepts[0].displayName).toBe("费用 fees");
+
+    const cross = await crossBookConcepts(skills, store);
+    expect(cross).toHaveLength(1);
+    expect(cross[0].books).toEqual(["book-1", "book-2", "book-3"]);
+    expect(await store.resolveByAlias("fees")).toBe(topicConcepts[0].conceptId);
+    expect(await store.resolveByAlias("费用")).toBe(topicConcepts[0].conceptId);
+  });
+
   it("maps concept-map edges to relations and drops unregistered endpoints", async () => {
     const store = createInMemoryConceptIdentityStore();
     const skill = skillInput("book-1", {

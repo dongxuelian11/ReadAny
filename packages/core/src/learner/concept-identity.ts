@@ -45,6 +45,8 @@ export interface ConceptIdentityStore {
   bindConceptSourceUnit(conceptId: string, sourceUnitId: string): Promise<void>;
   listConceptsForSourceUnit(sourceUnitId: string): Promise<string[]>;
   listConcepts(): Promise<ConceptRecord[]>;
+  /** V2 (PR-026): reverse participation — the chapters a concept covers. */
+  listSourceUnitsForConcept(conceptId: string): Promise<string[]>;
 }
 
 /** The legacy chapter-scoped identity, now explicit as a SOURCE-UNIT id. */
@@ -126,6 +128,13 @@ export function createInMemoryConceptIdentityStore(): ConceptIdentityStore {
     async listConceptsForSourceUnit(sourceUnitId) {
       const set = participations.get(sourceUnitId);
       return set ? [...set].sort() : [];
+    },
+    async listSourceUnitsForConcept(conceptId) {
+      const units: string[] = [];
+      for (const [sourceUnitId, conceptIds] of participations) {
+        if (conceptIds.has(conceptId)) units.push(sourceUnitId);
+      }
+      return units.sort();
     },
     async listConcepts() {
       return [...concepts.values()]

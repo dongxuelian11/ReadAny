@@ -13,6 +13,7 @@
 // onto canonical concepts, but nothing here reads or writes it.
 
 import { type ConceptIdentityStore, sourceUnitId } from "../learner/concept-identity";
+import type { MasteryStatus } from "../learner/types";
 import type { BookSkillTier1 } from "./types";
 
 export interface ConceptGraphSkillInput {
@@ -36,6 +37,14 @@ export interface CrossBookConcept {
   displayName: string;
   /** Distinct book ids whose chapters this concept covers. */
   books: string[];
+}
+
+/** A cross-book concept enriched with its CURRENT projected learner state
+ * (PR-026): the evidence-weighted mastery and worst status across the
+ * participating chapters, computed by the caller through the read model. */
+export interface ProjectedCrossBookConcept extends CrossBookConcept {
+  projectedMastery: number | null;
+  projectedStatus: MasteryStatus | null;
 }
 
 /** Normalize a concept name for the deterministic text merge: trim, lowercase,
@@ -69,6 +78,20 @@ export function frameworkConceptId(name: string): string {
 /** Edge relations that mean "you should understand `from` before `to`". */
 const PREREQUISITE_RELATIONS = new Set(["builds on", "requires"]);
 
+/** Language-variant aliases derived from a bilingual topic term: the latin
+ * runs and the CJK runs, lowercased. 「费用 fees」 also answers to 「费用」 and
+ * "fees" — how the deterministic merge bridges languages without a model. */
+export function derivedAliases(term: string): string[] {
+  const variants = new Set<string>();
+  for (const run of term.match(/[a-z0-9][a-z0-9'-]+/gi) ?? []) {
+    variants.add(run.toLowerCase());
+  }
+  for (const run of term.match(/[\u4e00-\u9fff]+/g) ?? []) {
+    variants.add(run);
+  }
+  return [...variants].filter((variant) => variant !== normalizeConceptName(term));
+}
+
 export async function buildConceptGraph(
   skills: ConceptGraphSkillInput[],
   store: ConceptIdentityStore,
@@ -88,14 +111,25 @@ export async function buildConceptGraph(
     );
 
     // Topic concepts: one per topic-index term, bound to every chapter the
-    // term's index line points at (N:M participation).
+    // term's index line points at (N:M participation). PR-026: the concept id
+    // prefers an EXISTING alias hit (normalized text or a derived
+    // language-variant), so 「费用 fees」 / 「费用」 / "fees" across books fold
+    // into one concept without a model.
     for (const entry of skill.tier1.topicIndex) {
       const term = entry.term.trim();
       if (!term) continue;
-      const conceptId = topicConceptId(term);
+      const normalized = normalizeConceptName(term);
+      const conceptId =
+        (await store.resolveByAlias(normalized)) ??
+        (await store.resolveByAlias(term)) ??
+        topicConceptId(term);
       await store.registerConcept({ conceptId, displayName: term, createdAt: now });
       summary.topicConcepts += 1;
       await store.bindAlias(term, conceptId);
+      await store.bindAlias(normalized, conceptId);
+      for (const variant of derivedAliases(term)) {
+        await store.bindAlias(variant, conceptId);
+      }
       for (const bookNumber of entry.chapters) {
         const chapterIndex = chapterIndexByNumber.get(bookNumber);
         if (chapterIndex === undefined) {

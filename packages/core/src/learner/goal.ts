@@ -159,3 +159,58 @@ export function buildCurriculum(
     builtAt,
   };
 }
+
+/**
+ * PR-026: reorder curriculum steps so prerequisite chapters come first, using
+ * prerequisite edges mined from the concept registry (chapter A participates
+ * in a concept that requires chapter B's concept → B before A). Pure and
+ * deterministic: Kahn's algorithm with book-order tiebreak; any cycle falls
+ * back to book order for its remaining members (a curriculum must always be
+ * complete). Steps without chapter-shaped ids keep their relative position.
+ */
+export function orderStepsByPrerequisites(
+  steps: CurriculumStep[],
+  edges: Array<{ before: number; after: number }>,
+): CurriculumStep[] {
+  const parseChapter = (conceptId: string): number | null => {
+    const match = /^readany:book:(.*):chapter:(\d+)$/.exec(conceptId);
+    return match ? Number.parseInt(match[2], 10) : null;
+  };
+  const chapterToPosition = new Map<number, number>();
+  steps.forEach((step, position) => {
+    const chapter = parseChapter(step.conceptId);
+    if (chapter !== null && !chapterToPosition.has(chapter)) {
+      chapterToPosition.set(chapter, position);
+    }
+  });
+
+  const prerequisitesOf = steps.map(() => new Set<number>()); // position -> chapters that must come first
+  for (const edge of edges) {
+    const beforePos = chapterToPosition.get(edge.before);
+    const afterPos = chapterToPosition.get(edge.after);
+    if (beforePos === undefined || afterPos === undefined || beforePos === afterPos) continue;
+    prerequisitesOf[afterPos].add(beforePos);
+  }
+
+  const emitted = new Set<number>();
+  const ordered: CurriculumStep[] = [];
+  while (ordered.length < steps.length) {
+    const next = steps.findIndex(
+      (_step, position) =>
+        !emitted.has(position) && [...prerequisitesOf[position]].every((pre) => emitted.has(pre)),
+    );
+    if (next === -1) {
+      // Cycle (or stale edges): emit the remaining steps in book order.
+      steps.forEach((step, position) => {
+        if (!emitted.has(position)) {
+          ordered.push({ ...step, index: ordered.length });
+          emitted.add(position);
+        }
+      });
+      break;
+    }
+    ordered.push({ ...steps[next], index: ordered.length });
+    emitted.add(next);
+  }
+  return ordered;
+}
