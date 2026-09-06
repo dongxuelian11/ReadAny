@@ -595,6 +595,21 @@ function AskSection({
             )}
             {state.askAnswer.report.claimsUnparsed && <p>{t("bookSkill.ask.unparsed")}</p>}
           </div>
+
+          {/* PR-022: re-run the same question through the normal flow — a new
+           * history row, fresh routing and fresh claims verification. */}
+          <Button
+            className="mt-3"
+            size="sm"
+            variant="outline"
+            disabled={state.askPhase !== "ready"}
+            onClick={() => {
+              if (state.askAnswer) onAsk(state.askAnswer.question);
+            }}
+          >
+            <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+            {t("bookSkill.ask.rerun")}
+          </Button>
         </div>
       )}
 
