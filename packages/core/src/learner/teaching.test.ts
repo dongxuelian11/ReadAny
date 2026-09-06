@@ -202,6 +202,47 @@ describe("teaching session lifecycle", () => {
     if (!done) throw new Error("session missing");
     await expect(answerCurrentStep(deps, done, 1)).rejects.toThrow("not active");
   });
+
+  it("resumes after a crash between the evidence write and the session advance (iter-1)", async () => {
+    const { deps, stores, llm } = createDeps();
+    const goal = curriculum(1);
+    let session = await startTeachingSession(deps, goal);
+    session = await deliverCurrentStep(deps, session, "B");
+
+    // Simulate the crash window: the evidence applied, then teachings.put
+    // dies — the persisted session still shows the step as unanswered.
+    const brokenDeps = {
+      ...deps,
+      teachings: {
+        ...deps.teachings,
+        put: async (arg: Parameters<typeof deps.teachings.put>[0]) => {
+          throw new Error("session write failed");
+        },
+      },
+    };
+    await expect(answerCurrentStep(brokenDeps, session, 1)).rejects.toThrow(
+      "session write failed",
+    );
+    const crashed = await deps.teachings.get(session.id);
+    expect(crashed?.steps[0].answered).toBe(false);
+    // But the evidence + BKT + FSRS already landed (write lock released).
+    expect(stores.events()).toHaveLength(1);
+    expect((await deps.mastery.get("readany:book:b1:chapter:0"))?.evidenceCount).toBe(1);
+
+    // Retry with the stale session (as a reload would): the resumable engine
+    // skips the already-applied event and the advance completes.
+    const resumed = await answerCurrentStep(deps, session, 1);
+    expect(resumed.steps[0].answered).toBe(true);
+    expect(resumed.status).toBe("completed");
+    // Exactly once: one event, one log, one FSRS review, one BKT update.
+    expect(stores.events()).toHaveLength(1);
+    expect(stores.logs()).toHaveLength(1);
+    expect((await deps.reviews.getCard("readany:book:b1:chapter:0"))?.reps).toBe(1);
+    const mastery = await deps.mastery.get("readany:book:b1:chapter:0");
+    expect(mastery?.evidenceCount).toBe(1);
+    expect(mastery?.lastEventId).toBe(`${session.id}:readany:book:b1:chapter:0`);
+    expect(llm.calls).toBe(1); // no regeneration on resume
+  });
 });
 
 function llmCalls(deps: { llm: unknown }): number {

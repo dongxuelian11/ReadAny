@@ -55,6 +55,10 @@ export function LearningPanel({ book, onNavigateToCitation }: LearningPanelProps
   const [quizConfirmState, setQuizConfirmState] = useState<
     "idle" | "recording" | "recorded" | "error"
   >("idle");
+  // Iter-1: the attempt id minted when the current question was answered. The
+  // confirm step must reference the SAME attempt (pure metadata), and a new
+  // answer mints a fresh one — re-answering counts, confirming does not.
+  const quizAttemptIdRef = useRef<string | null>(null);
   const questionRef = useRef<HTMLTextAreaElement>(null);
   const bookRef = useRef(book);
   const readingContextRef = useRef(readingContext);
@@ -166,12 +170,16 @@ export function LearningPanel({ book, onNavigateToCitation }: LearningPanelProps
       );
       dispatch({ type: "QUIZ_JUDGED", judgement });
       setQuizConfirmState("idle");
+      // Iter-1: one attemptId per answering occurrence, minted at judgement
+      // time and reused by the confirm step below.
+      const attemptId = crypto.randomUUID();
+      quizAttemptIdRef.current = attemptId;
       // Durable-first (PR-012): the judgement is enqueued to the evidence
       // outbox before it is applied, so a crash or failed write can no longer
       // silently lose it — pending rows replay on the next launch.
       // Fire-and-forget still: persistence must never disrupt the quiz UX.
-      void recordQuizEvidence(judgement, bridge.source, currentQuestion).catch((error) =>
-        console.error("Failed to record quiz evidence:", error),
+      void recordQuizEvidence(judgement, bridge.source, currentQuestion, attemptId).catch(
+        (error) => console.error("Failed to record quiz evidence:", error),
       );
     } catch (error) {
       dispatch({ type: "ERROR", error: error instanceof Error ? error.message : String(error) });
@@ -182,10 +190,13 @@ export function LearningPanel({ book, onNavigateToCitation }: LearningPanelProps
     if (quizConfirmState === "recording" || quizConfirmState === "recorded") return;
     const currentQuestion = state.quizQuestions[state.quizIndex];
     if (!currentQuestion || !state.quizJudgement) return;
+    // Metadata-only (iter-1): records the vouch next to the SAME attempt's
+    // evidence id — no second BKT/FSRS apply.
+    const attemptId = quizAttemptIdRef.current ?? crypto.randomUUID();
     setQuizConfirmState("recording");
     try {
       const bridge = requireBridge();
-      await confirmQuizEvidence(state.quizJudgement, bridge.source, currentQuestion);
+      await confirmQuizEvidence(state.quizJudgement, bridge.source, currentQuestion, attemptId);
       setQuizConfirmState("recorded");
     } catch (error) {
       console.error("Failed to record confirmed quiz evidence:", error);

@@ -38,6 +38,7 @@ import type {
   EvidenceSource,
   EvidenceTaskType,
   EvidenceVerification,
+  LearnerEvidenceConfirmationStore,
   LearnerEvidenceStore,
   LearnerMasteryStore,
   LearnerReviewCardData,
@@ -50,6 +51,36 @@ function isUniqueConstraintError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /unique constraint|primary key must be unique/i.test(message);
 }
+
+type EvidenceRow = Record<string, unknown>;
+
+function evidenceFromRow(row: EvidenceRow): EvidenceEvent {
+  return {
+    id: String(row.id),
+    conceptId: String(row.concept_id),
+    source: row.source as EvidenceSource,
+    taskType: row.task_type as EvidenceTaskType,
+    questionType: (row.question_type as EvidenceQuestionType | null) ?? undefined,
+    difficulty: (row.difficulty as 1 | 2 | 3 | null) ?? undefined,
+    result: row.result as EvidenceResult,
+    confidence: Number(row.confidence),
+    verification: (row.verification as EvidenceVerification | null) ?? undefined,
+    timestamp: Number(row.timestamp),
+    sourceLocator:
+      row.source_book_id === null &&
+      row.source_chapter_index === null &&
+      row.source_cfi === null
+        ? undefined
+        : {
+            bookId: (row.source_book_id as string | null) ?? undefined,
+            chapterIndex: (row.source_chapter_index as number | null) ?? undefined,
+            cfi: (row.source_cfi as string | null) ?? undefined,
+          },
+  };
+}
+
+const EVIDENCE_COLUMNS = `id, concept_id, source, task_type, question_type, difficulty, result,
+            confidence, verification, timestamp, source_book_id, source_chapter_index, source_cfi`;
 
 export class SqliteLearnerEvidenceStore implements LearnerEvidenceStore {
   constructor(private readonly database?: IDatabase) {}
@@ -90,36 +121,25 @@ export class SqliteLearnerEvidenceStore implements LearnerEvidenceStore {
     }
   }
 
+  async getById(id: string): Promise<EvidenceEvent | null> {
+    const database = await this.db();
+    const rows = await database.select<EvidenceRow>(
+      `SELECT ${EVIDENCE_COLUMNS} FROM learner_evidence_events WHERE id = ?`,
+      [id],
+    );
+    return rows[0] ? evidenceFromRow(rows[0]) : null;
+  }
+
   async listByConcept(conceptId: string): Promise<EvidenceEvent[]> {
     const database = await this.db();
-    const rows = await database.select<Record<string, unknown>>(
-      `SELECT id, concept_id, source, task_type, question_type, difficulty, result, confidence,
-              verification, timestamp, source_book_id, source_chapter_index, source_cfi
+    const rows = await database.select<EvidenceRow>(
+      `SELECT ${EVIDENCE_COLUMNS}
        FROM learner_evidence_events
        WHERE concept_id = ?
        ORDER BY timestamp ASC, id ASC`,
       [conceptId],
     );
-    return rows.map((row) => ({
-      id: String(row.id),
-      conceptId: String(row.concept_id),
-      source: row.source as EvidenceSource,
-      taskType: row.task_type as EvidenceTaskType,
-      questionType: (row.question_type as EvidenceQuestionType | null) ?? undefined,
-      difficulty: (row.difficulty as 1 | 2 | 3 | null) ?? undefined,
-      result: row.result as EvidenceResult,
-      confidence: Number(row.confidence),
-      verification: (row.verification as EvidenceVerification | null) ?? undefined,
-      timestamp: Number(row.timestamp),
-      sourceLocator:
-        row.source_book_id === null && row.source_chapter_index === null && row.source_cfi === null
-          ? undefined
-          : {
-              bookId: (row.source_book_id as string | null) ?? undefined,
-              chapterIndex: (row.source_chapter_index as number | null) ?? undefined,
-              cfi: (row.source_cfi as string | null) ?? undefined,
-            },
-    }));
+    return rows.map(evidenceFromRow);
   }
 
   async countByConcept(conceptId: string): Promise<number> {
@@ -143,7 +163,7 @@ export class SqliteLearnerMasteryStore implements LearnerMasteryStore {
     const database = await this.db();
     const rows = await database.select<Record<string, unknown>>(
       `SELECT concept_id, mastery, confidence, retention, transfer, last_verified, next_review,
-              status, evidence_count, updated_at
+              status, evidence_count, updated_at, last_event_id
        FROM learner_concept_mastery
        WHERE concept_id = ?`,
       [conceptId],
@@ -161,6 +181,7 @@ export class SqliteLearnerMasteryStore implements LearnerMasteryStore {
       status: row.status as MasteryStatus,
       evidenceCount: Number(row.evidence_count),
       updatedAt: Number(row.updated_at),
+      lastEventId: (row.last_event_id as string | null) ?? null,
     };
   }
 
@@ -170,8 +191,8 @@ export class SqliteLearnerMasteryStore implements LearnerMasteryStore {
       database.execute(
         `INSERT OR REPLACE INTO learner_concept_mastery
           (concept_id, mastery, confidence, retention, transfer, last_verified, next_review,
-           status, evidence_count, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           status, evidence_count, updated_at, last_event_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           mastery.conceptId,
           mastery.mastery,
@@ -183,6 +204,7 @@ export class SqliteLearnerMasteryStore implements LearnerMasteryStore {
           mastery.status,
           mastery.evidenceCount,
           mastery.updatedAt,
+          mastery.lastEventId ?? null,
         ],
       ),
     );
@@ -199,7 +221,8 @@ export class SqliteLearnerReviewStore implements LearnerReviewStore {
   async getCard(conceptId: string): Promise<LearnerReviewCardData | null> {
     const database = await this.db();
     const rows = await database.select<Record<string, unknown>>(
-      `SELECT concept_id, due, stability, difficulty, learning_steps, reps, lapses, state, last_review
+      `SELECT concept_id, due, stability, difficulty, learning_steps, reps, lapses, state,
+              last_review, last_event_id
        FROM learner_review_cards
        WHERE concept_id = ?`,
       [conceptId],
@@ -216,6 +239,7 @@ export class SqliteLearnerReviewStore implements LearnerReviewStore {
       lapses: Number(row.lapses),
       state: Number(row.state),
       lastReview: row.last_review === null ? null : Number(row.last_review),
+      lastEventId: (row.last_event_id as string | null) ?? null,
     };
   }
 
@@ -224,8 +248,9 @@ export class SqliteLearnerReviewStore implements LearnerReviewStore {
     await runWithDbRetry(() =>
       database.execute(
         `INSERT OR REPLACE INTO learner_review_cards
-          (concept_id, due, stability, difficulty, learning_steps, reps, lapses, state, last_review)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (concept_id, due, stability, difficulty, learning_steps, reps, lapses, state,
+           last_review, last_event_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           card.conceptId,
           card.due,
@@ -236,6 +261,7 @@ export class SqliteLearnerReviewStore implements LearnerReviewStore {
           card.lapses,
           card.state,
           card.lastReview,
+          card.lastEventId ?? null,
         ],
       ),
     );
@@ -243,11 +269,22 @@ export class SqliteLearnerReviewStore implements LearnerReviewStore {
 
   async appendLog(entry: LearnerReviewLogEntry): Promise<void> {
     const database = await this.db();
+    // Per-event idempotency (iter-1): a replayed log write for an event whose
+    // review is already recorded is a no-op, so a crash between the card write
+    // and the log write repairs on the next apply instead of double-logging.
+    if (entry.eventId) {
+      const existing = await database.select<{ id: number }>(
+        "SELECT id FROM learner_review_logs WHERE event_id = ?",
+        [entry.eventId],
+      );
+      if (existing.length > 0) return;
+    }
     await runWithDbRetry(() =>
       database.execute(
         `INSERT INTO learner_review_logs
-          (concept_id, rating, state, due, stability, difficulty, scheduled_days, learning_steps, review)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (concept_id, rating, state, due, stability, difficulty, scheduled_days, learning_steps,
+           review, event_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           entry.conceptId,
           entry.rating,
@@ -258,6 +295,7 @@ export class SqliteLearnerReviewStore implements LearnerReviewStore {
           entry.scheduledDays,
           entry.learningSteps,
           entry.review,
+          entry.eventId ?? null,
         ],
       ),
     );
@@ -492,6 +530,7 @@ export interface SqliteLearnerStores {
   goals: GoalStore;
   teachings: TeachingStore;
   identity: ConceptIdentityStore;
+  confirmations: LearnerEvidenceConfirmationStore;
 }
 
 export function createSqliteLearnerStores(database?: IDatabase): SqliteLearnerStores {
@@ -503,7 +542,37 @@ export function createSqliteLearnerStores(database?: IDatabase): SqliteLearnerSt
     goals: new SqliteGoalStore(database),
     teachings: new SqliteTeachingStore(database),
     identity: new SqliteConceptIdentityStore(database),
+    confirmations: new SqliteEvidenceConfirmationStore(database),
   };
+}
+
+/** Confirmation metadata adapter (iter-1): the learner's vouch for a judged
+ * verdict, recorded as pure annotation — never a second BKT/FSRS apply. */
+export class SqliteEvidenceConfirmationStore implements LearnerEvidenceConfirmationStore {
+  constructor(private readonly database?: IDatabase) {}
+
+  private async db(): Promise<IDatabase> {
+    return this.database ?? (await getDB());
+  }
+
+  async record(evidenceId: string, confirmedAt: number): Promise<void> {
+    const database = await this.db();
+    await runWithDbRetry(() =>
+      database.execute(
+        "INSERT OR IGNORE INTO learner_evidence_confirmations (evidence_id, confirmed_at) VALUES (?, ?)",
+        [evidenceId, confirmedAt],
+      ),
+    );
+  }
+
+  async get(evidenceId: string): Promise<number | null> {
+    const database = await this.db();
+    const rows = await database.select<{ confirmed_at: number }>(
+      "SELECT confirmed_at FROM learner_evidence_confirmations WHERE evidence_id = ?",
+      [evidenceId],
+    );
+    return rows[0] ? Number(rows[0].confirmed_at) : null;
+  }
 }
 
 /** Durable evidence outbox adapter (PR-012): the event is stored as JSON with
@@ -522,7 +591,13 @@ export class SqliteEvidenceOutboxStore implements LearnerEvidenceOutboxStore {
   ): Promise<{ outboxId: string; event: PinnedEvidenceEvent }> {
     const database = await this.db();
     const outboxId = crypto.randomUUID();
-    const pinned: PinnedEvidenceEvent = { ...event, id: event.id ?? crypto.randomUUID() };
+    const pinned: PinnedEvidenceEvent = {
+      ...event,
+      id: event.id ?? crypto.randomUUID(),
+      // Pin the answer time at enqueue (iter-1): replays apply with the
+      // original timestamp instead of silently moving to the drain instant.
+      timestamp: event.timestamp ?? createdAt,
+    };
     await runWithDbRetry(() =>
       database.execute(
         `INSERT INTO learner_evidence_outbox (id, event_json, created_at, attempts, status, last_error)

@@ -135,7 +135,10 @@ export async function deliverCurrentStep(
 
 /** Grade the current step's comprehension check deterministically, record the
  * evidence (BKT + FSRS move), and advance. Fail-closed on missing content,
- * duplicate answers, or inactive sessions. */
+ * duplicate answers, or inactive sessions. Crash-resumable (iter-1): if the
+ * evidence applied but the session write failed, a retry with the same
+ * session resumes — the idempotent engine skips the already-applied event and
+ * the advance completes. */
 export async function answerCurrentStep(
   deps: TeachingEngineDeps,
   session: TeachingSession,
@@ -153,6 +156,9 @@ export async function answerCurrentStep(
   const correct = selectedOption === content.check.correctIndex;
   const now = deps.clock.now();
 
+  // The answer time is stamped ON the evidence (iter-1): a retry after a
+  // crash replays with the same pinned timestamp, so the FSRS/BKT outcome is
+  // byte-identical instead of silently moving to the retry instant.
   await applyEvidenceEvent(
     {
       clock: deps.clock,
@@ -160,7 +166,10 @@ export async function answerCurrentStep(
       mastery: deps.mastery,
       reviews: deps.reviews,
     },
-    teachingEvidence({ sessionId: session.id, step, correct }),
+    {
+      ...teachingEvidence({ sessionId: session.id, step, correct }),
+      timestamp: now.getTime(),
+    },
   );
 
   const steps = session.steps.map((entry) =>

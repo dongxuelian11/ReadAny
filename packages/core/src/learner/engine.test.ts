@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { MASTERY_THRESHOLD, updateMastery } from "./bkt";
 import {
+  EvidenceConflictError,
   EvidenceNotAdmittedError,
   applyEvidenceEvent,
+  applyEvidenceEventResult,
   deriveMasteryStatus,
   evaluateConceptMastery,
 } from "./engine";
 import type { EvidenceEventInput, LearnerEngineDeps } from "./engine";
-import { DuplicateEvidenceIdError, createInMemoryLearnerStores } from "./stores";
+import { createLearnerScheduler, newConceptCard, reviewConceptCard } from "./review";
+import { createInMemoryLearnerStores } from "./stores";
 
 const NOW = new Date("2026-08-30T00:00:00.000Z");
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -104,14 +107,97 @@ describe("deterministic learner engine", () => {
     expect(after.evidenceCount).toBe(2);
   });
 
-  it("enforces the append-only ledger: duplicate evidence ids are rejected", async () => {
+  it("rejects a duplicate id whose content conflicts with the stored event", async () => {
     const { deps, stores } = createDeps();
     await applyEvidenceEvent(deps, quizInput({ id: "same-id" }));
-    await expect(applyEvidenceEvent(deps, quizInput({ id: "same-id" }))).rejects.toBeInstanceOf(
-      DuplicateEvidenceIdError,
-    );
+    await expect(
+      applyEvidenceEvent(deps, quizInput({ id: "same-id", result: "incorrect" })),
+    ).rejects.toBeInstanceOf(EvidenceConflictError);
     expect(stores.events()).toHaveLength(1);
     expect(stores.logs()).toHaveLength(1);
+  });
+
+  it("resumes a duplicate id for the SAME attempt without double-applying (iter-1)", async () => {
+    const { deps, stores } = createDeps();
+    const first = await applyEvidenceEventResult(deps, quizInput({ id: "same-id" }));
+    expect(first.alreadyApplied).toBe(false);
+    expect(stores.logs()).toHaveLength(1);
+
+    // Replay of the same pinned event: the commit markers short-circuit every
+    // step — one ledger row, one BKT update, one FSRS review.
+    const replay = await applyEvidenceEventResult(deps, quizInput({ id: "same-id" }));
+    expect(replay.alreadyApplied).toBe(true);
+    expect(replay.mastery.mastery).toBeCloseTo(first.mastery.mastery, 12);
+    expect(stores.events()).toHaveLength(1);
+    expect(stores.logs()).toHaveLength(1);
+    const card = await deps.reviews.getCard("stats/mean");
+    expect(card?.reps).toBe(1);
+  });
+
+  it("resumes a mid-apply crash: evidence written, FSRS/BKT missing (iter-1)", async () => {
+    // Simulate the crash window: the ledger row exists but the derived writes
+    // never landed (a process death between store calls).
+    const { deps, stores } = createDeps();
+    await deps.evidence.append({
+      ...quizInput({ id: "crash-1" }),
+      id: "crash-1",
+      timestamp: NOW.getTime(),
+    });
+    expect(stores.logs()).toHaveLength(0);
+
+    const resumed = await applyEvidenceEventResult(deps, quizInput({ id: "crash-1" }));
+    expect(resumed.alreadyApplied).toBe(false);
+    expect(stores.logs()).toHaveLength(1);
+    // The mastery row reflects exactly ONE BKT update from the cold-start prior.
+    expect(resumed.mastery.mastery).toBeCloseTo(
+      updateMastery({ pKnow: 0.3, pLearn: 0.1, pGuess: 0.2, pSlip: 0.1 }, 0.3, true, "mc"),
+      12,
+    );
+    expect(resumed.mastery.evidenceCount).toBe(1);
+  });
+
+  it("resumes a crash between the log write and the card write (iter-1)", async () => {
+    const { deps, stores } = createDeps();
+    // Hand-built crash window: ledger row + review log present, but the card
+    // write (which carries the marker) never landed.
+    await deps.evidence.append({
+      ...quizInput({ id: "crash-2" }),
+      id: "crash-2",
+      timestamp: NOW.getTime(),
+    });
+    const precomputed = reviewConceptCard(
+      createLearnerScheduler(),
+      newConceptCard("stats/mean", NOW),
+      NOW,
+      true,
+    );
+    await deps.reviews.appendLog({ ...precomputed.log, eventId: "crash-2" });
+
+    const resumed = await applyEvidenceEventResult(deps, quizInput({ id: "crash-2" }));
+    expect(resumed.alreadyApplied).toBe(false);
+    // The card was completed exactly once (FSRS not double-applied); the log
+    // deduped by event id instead of duplicating.
+    expect(stores.logs()).toHaveLength(1);
+    expect(stores.logs()[0].eventId).toBe("crash-2");
+    const cardAfter = await deps.reviews.getCard("stats/mean");
+    expect(cardAfter?.reps).toBe(1);
+    expect(cardAfter?.lastEventId).toBe("crash-2");
+    expect(resumed.mastery.evidenceCount).toBe(1);
+    expect(resumed.mastery.lastEventId).toBe("crash-2");
+  });
+
+  it("preserves the pinned answer time across a replay (iter-1)", async () => {
+    const { deps, stores } = createDeps();
+    const answerTime = NOW.getTime() - 3 * DAY_MS;
+    await applyEvidenceEvent(deps, quizInput({ id: "pinned", timestamp: answerTime }));
+    // The ledger row keeps the original time, not the clock instant.
+    expect(stores.events()[0].timestamp).toBe(answerTime);
+    expect(stores.logs()[0].review).toBe(answerTime);
+    const row = await deps.mastery.get("stats/mean");
+    expect(row?.lastVerified).toBe(answerTime);
+    // Replay keeps it pinned too.
+    await applyEvidenceEventResult(deps, quizInput({ id: "pinned", timestamp: answerTime }));
+    expect(stores.events()[0].timestamp).toBe(answerTime);
   });
 
   it("keeps concepts isolated from each other", async () => {

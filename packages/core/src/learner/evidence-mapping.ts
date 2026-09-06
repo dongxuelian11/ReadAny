@@ -32,27 +32,34 @@ function quizContentHash(question: LearningQuizQuestion): string {
 }
 
 /**
- * Deterministic evidence id for one judged quiz answer: stable across retries
- * and replays of the same submission, distinct for distinct question content.
- * Two sessions that generate the identical question text for the same chapter
- * slot are treated as the same evidence (documented dedupe semantics).
+ * Deterministic evidence id for one judged quiz answer: the QUESTION hash
+ * identifies the question, the attemptId identifies THIS answering occurrence.
+ * A retry/replay of the same attempt reuses the same id (dedupe against the
+ * append-only ledger); re-answering the same question in a later session mints
+ * a fresh attemptId, so yesterday's wrong answer and today's right one are
+ * both recorded (iter-1: the attempt, not the question, is the dedupe unit).
+ * The caller pins the judgement timestamp on the event so replays keep the
+ * original answer time.
  */
 export function quizEvidenceId(
-  judgement: LearningQuizJudgement,
   source: LearningSourceRef,
   question: LearningQuizQuestion,
+  attemptId: string,
 ): string {
-  return `readany:quiz:${source.readAnyBookId}:ch${source.location.chapterIndex}:${judgement.current}:${quizContentHash(question)}`;
+  return `readany:quiz:${source.readAnyBookId}:ch${source.location.chapterIndex}:${attemptId}:${quizContentHash(question)}`;
 }
 
-/** Map a judged Read-Box quiz answer to a deterministic evidence input. */
+/** Map a judged Read-Box quiz answer to an evidence input. The id requires a
+ * caller-supplied attemptId (one per answering occurrence, persisted via the
+ * outbox enqueue); the caller also pins the event timestamp. */
 export function quizJudgementToEvidence(
   judgement: LearningQuizJudgement,
   source: LearningSourceRef,
   question: LearningQuizQuestion,
-): EvidenceEventInput {
+  attemptId: string,
+): Omit<EvidenceEventInput, "id" | "timestamp"> & { id: string; timestamp?: number } {
   return {
-    id: quizEvidenceId(judgement, source, question),
+    id: quizEvidenceId(source, question, attemptId),
     conceptId: chapterConceptId(source),
     source: "READ_BOX_QUIZ",
     taskType: "quiz",
