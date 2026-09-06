@@ -3,12 +3,12 @@
 // (loading / empty / error / active / completed) and the panel renders only
 // from this state.
 //
-// PR-018: the panel also hosts the shelf-wide "ask the shelf" section â€” its
+// PR-018: the panel also hosts the shelf-wide "ask the shelf" section â€?its
 // state rides in this reducer and resets with BOOK_CHANGED (the ask is bound
 // to the panel session, not to any single book).
 
 import type { StoredAskAnswer } from "./ask-history";
-import type { CrossBookConcept } from "./concept-graph";
+import type { ProjectedCrossBookConcept } from "./concept-graph";
 import type { CrossBookAnswer } from "./cross-book";
 import type { BookSkillCostEstimate } from "./estimate";
 import type { BookSkillGenre, BookSkillProgress, BookSkillResult } from "./types";
@@ -43,7 +43,7 @@ export interface BookSkillPanelState {
   askHistory: StoredAskAnswer[];
   // Concept graph V2 (PR-024): shelf-wide cross-book concepts, null until the
   // first build completes for this panel session.
-  conceptGraph: { totalConcepts: number; crossBook: CrossBookConcept[] } | null;
+  conceptGraph: { totalConcepts: number; crossBook: ProjectedCrossBookConcept[] } | null;
 }
 
 export type BookSkillPanelAction =
@@ -62,7 +62,7 @@ export type BookSkillPanelAction =
   | { type: "ASK_READY"; answer: CrossBookAnswer }
   | { type: "ASK_ERROR"; error: string }
   | { type: "ASK_HISTORY_READY"; entries: StoredAskAnswer[] }
-  | { type: "CONCEPT_GRAPH_READY"; totalConcepts: number; crossBook: CrossBookConcept[] };
+  | { type: "CONCEPT_GRAPH_READY"; totalConcepts: number; crossBook: ProjectedCrossBookConcept[] };
 
 export const initialBookSkillPanelState: BookSkillPanelState = {
   phase: "idle",

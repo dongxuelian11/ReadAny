@@ -686,6 +686,15 @@ export class SqliteConceptIdentityStore implements ConceptIdentityStore {
     return rows.map((row) => String(row.concept_id));
   }
 
+  async listSourceUnitsForConcept(conceptId: string): Promise<string[]> {
+    const database = await this.db();
+    const rows = await database.select<{ source_unit_id: string }>(
+      "SELECT source_unit_id FROM learner_concept_participations WHERE concept_id = ? ORDER BY source_unit_id ASC",
+      [conceptId],
+    );
+    return rows.map((row) => String(row.source_unit_id));
+  }
+
   async listConcepts(): Promise<ConceptRecord[]> {
     const database = await this.db();
     const rows = await database.select<Record<string, unknown>>(

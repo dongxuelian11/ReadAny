@@ -524,9 +524,29 @@ function ConceptGraphSection({ state }: { state: ReturnType<typeof bookSkillPane
         <ul className="mt-2 divide-y divide-border/40">
           {graph.crossBook.map((concept) => (
             <li key={concept.conceptId} className="flex items-center justify-between gap-3 py-2">
-              <span className="min-w-0 truncate text-xs font-medium">{concept.displayName}</span>
-              <span className="shrink-0 text-[11px] text-muted-foreground">
-                {t("bookSkill.graph.books", { count: concept.books.length })}
+              <span className="min-w-0">
+                <span className="block truncate text-xs font-medium">{concept.displayName}</span>
+                <span className="text-[11px] text-muted-foreground">
+                  {t("bookSkill.graph.books", { count: concept.books.length })}
+                </span>
+              </span>
+              <span className="shrink-0 text-right">
+                {concept.projectedMastery !== null && (
+                  <span className="block text-xs font-medium text-foreground">
+                    {Math.round(concept.projectedMastery * 100)}%
+                  </span>
+                )}
+                {concept.projectedStatus && (
+                  <span
+                    className={`block rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                      concept.projectedStatus === "needs_review"
+                        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                        : "bg-primary/10 text-primary"
+                    }`}
+                  >
+                    {t(`learnerPanel.status.${concept.projectedStatus}`)}
+                  </span>
+                )}
               </span>
             </li>
           ))}
