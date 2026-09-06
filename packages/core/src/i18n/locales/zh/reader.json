@@ -341,7 +341,17 @@
       "title": "到期复习",
       "empty": "当前没有到期的复习。",
       "dueAt": "{{date}} 到期",
-      "refresh": "刷新"
+      "refresh": "刷新",
+      "start": "开始复习",
+      "dueCount": "共 {{count}} 项到期（本轮最多复习 {{limit}} 项）",
+      "delivering": "正在生成复习内容…",
+      "progress": "第 {{current}} / {{total}} 项",
+      "correctAnswer": "正确答案：{{answer}}",
+      "retryItem": "重试本题",
+      "cancel": "结束复习",
+      "seeSummary": "完成复习",
+      "done": "本轮复习完成",
+      "doneNote": "每一次作答都已计入掌握度与复习排程。"
     },
     "status": {
       "unseen": "未接触",

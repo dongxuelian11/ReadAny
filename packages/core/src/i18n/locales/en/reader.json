@@ -341,7 +341,17 @@
       "title": "Due reviews",
       "empty": "Nothing is due right now.",
       "dueAt": "Due {{date}}",
-      "refresh": "Refresh"
+      "refresh": "Refresh",
+      "start": "Start review",
+      "dueCount": "{{count}} items are due (this round covers up to {{limit}})",
+      "delivering": "Preparing this review item…",
+      "progress": "Item {{current}} of {{total}}",
+      "correctAnswer": "Correct answer: {{answer}}",
+      "retryItem": "Retry this item",
+      "cancel": "End review",
+      "seeSummary": "Finish review",
+      "done": "Review round complete",
+      "doneNote": "Every answer has been recorded into mastery and review scheduling."
     },
     "status": {
       "unseen": "not seen",

@@ -1,7 +1,7 @@
-// Reducer for the Reader Learner panel (PR-007): the placement flow, the
+﻿// Reducer for the Reader Learner panel (PR-007): the placement flow, the
 // per-chapter mastery view, and the due-review view. Every phase must be
 // designed (loading / empty / error / active / completed) and the panel
-// renders only from this state. Deterministic and UI-free — the component
+// renders only from this state. Deterministic and UI-free 鈥?the component
 // supplies sessions/verdicts produced by the app triggers over the core
 // engine.
 
@@ -39,6 +39,24 @@ export type LearnerTeachingPhase =
   | "completed"
   | "error";
 
+/** Bounded due-review flow (iter-2): a small queue of due concepts, walked one
+ * item at a time through the same generate 鈫?answer 鈫?evidence path as
+ * teaching. Deliberately not persisted: a crash mid-review just leaves that
+ * item due, and the evidence itself is durable-first. */
+export type LearnerReviewPhase =
+  | "idle"
+  | "delivering"
+  | "active"
+  | "answering"
+  | "completed"
+  | "error";
+
+export interface LearnerReviewSession {
+  /** Due concept ids to review, bounded queue order. */
+  conceptIds: string[];
+  index: number;
+}
+
 export interface LearnerMasteryRow {
   conceptId: string;
   title: string;
@@ -75,7 +93,19 @@ export interface LearnerPanelState {
   teachingPhase: LearnerTeachingPhase;
   teaching: TeachingSession | null;
   lastStepAnswer: { correct: boolean; explanation: string } | null;
+  /** The step that was just answered, with its delivered content (iter-2):
+   * the feedback card renders from this snapshot 鈥?after answering, the
+   * session already points at the next (content-less) step, and the final
+   * step flips the phase to completed, so the live teaching view cannot show
+   * the verdict itself. */
+  lastAnsweredView: { step: TeachingStep; content: TeachingContent } | null;
   teachingError: string | null;
+  // Bounded due-review flow (iter-2)
+  reviewRunPhase: LearnerReviewPhase;
+  reviewSession: LearnerReviewSession | null;
+  reviewItem: { conceptId: string; title: string; content: TeachingContent } | null;
+  reviewAnswer: { correct: boolean; explanation: string; selectedOption: number } | null;
+  reviewRunError: string | null;
 }
 
 export type LearnerPanelAction =
@@ -107,11 +137,42 @@ export type LearnerPanelAction =
   | { type: "GOAL_CREATED"; goal: GoalSpec; curriculum: PersonalCurriculum }
   | { type: "GOAL_ERROR"; error: string }
   | { type: "TEACHING_STARTING" }
+  /** The session exists in the store the moment start succeeds (iter-2):
+   * dispatching it here makes the error-phase retry work even if the first
+   * step's content generation fails. */
+  | { type: "TEACHING_STARTED"; session: TeachingSession }
   | { type: "TEACHING_DELIVERING" }
   | { type: "TEACHING_DELIVERED"; session: TeachingSession }
   | { type: "TEACHING_ANSWERING" }
-  | { type: "TEACHING_ANSWERED"; session: TeachingSession; correct: boolean; explanation: string }
-  | { type: "TEACHING_FAILED"; error: string };
+  | {
+      type: "TEACHING_ANSWERED";
+      session: TeachingSession;
+      correct: boolean;
+      explanation: string;
+      answeredStep: TeachingStep;
+      answeredContent: TeachingContent;
+    }
+  | { type: "TEACHING_FAILED"; error: string }
+  | { type: "CURRICULUM_REFRESHED"; curriculum: PersonalCurriculum }
+  | { type: "REVIEW_START"; conceptIds: string[] }
+  | { type: "REVIEW_DELIVERING" }
+  | {
+      type: "REVIEW_DELIVERED";
+      conceptId: string;
+      title: string;
+      content: TeachingContent;
+    }
+  | { type: "REVIEW_ANSWERING" }
+  | {
+      type: "REVIEW_ANSWERED";
+      correct: boolean;
+      explanation: string;
+      selectedOption: number;
+    }
+  | { type: "REVIEW_NEXT" }
+  | { type: "REVIEW_FINISH" }
+  | { type: "REVIEW_CANCEL" }
+  | { type: "REVIEW_ERROR"; error: string };
 
 export const initialLearnerPanelState: LearnerPanelState = {
   tab: "goal",
@@ -131,7 +192,13 @@ export const initialLearnerPanelState: LearnerPanelState = {
   teachingPhase: "idle",
   teaching: null,
   lastStepAnswer: null,
+  lastAnsweredView: null,
   teachingError: null,
+  reviewRunPhase: "idle",
+  reviewSession: null,
+  reviewItem: null,
+  reviewAnswer: null,
+  reviewRunError: null,
 };
 
 /** The item the CAT wants next, or null when the stop rules are satisfied. */
@@ -226,6 +293,7 @@ export function learnerPanelReducer(
         teaching: action.teaching,
         teachingPhase: action.teaching?.status === "active" ? "active" : "idle",
         lastStepAnswer: null,
+        lastAnsweredView: null,
         teachingError: null,
         error: null,
       };
@@ -242,6 +310,7 @@ export function learnerPanelReducer(
         teaching: null,
         teachingPhase: "idle",
         lastStepAnswer: null,
+        lastAnsweredView: null,
         teachingError: null,
       };
     case "GOAL_ERROR":
@@ -251,6 +320,19 @@ export function learnerPanelReducer(
         ...state,
         teachingPhase: "starting",
         lastStepAnswer: null,
+        lastAnsweredView: null,
+        teachingError: null,
+      };
+    case "TEACHING_STARTED":
+      // The session is persisted in the core at this point (iter-2): keeping
+      // it in state BEFORE the first content generation makes the error
+      // phase's retry actually resumable instead of a silent no-op.
+      return {
+        ...state,
+        teaching: action.session,
+        teachingPhase: "delivering",
+        lastStepAnswer: null,
+        lastAnsweredView: null,
         teachingError: null,
       };
     case "TEACHING_DELIVERING":
@@ -263,6 +345,7 @@ export function learnerPanelReducer(
         // The previous step's verdict belongs to the previous step; a freshly
         // delivered step must render its own content, not stale feedback.
         lastStepAnswer: null,
+        lastAnsweredView: null,
       };
     case "TEACHING_ANSWERING":
       return { ...state, teachingPhase: "answering", teachingError: null };
@@ -272,9 +355,74 @@ export function learnerPanelReducer(
         teaching: action.session,
         teachingPhase: action.session.status === "completed" ? "completed" : "active",
         lastStepAnswer: { correct: action.correct, explanation: action.explanation },
+        // Snapshot of the answered step's delivered content: the feedback card
+        // renders from this, not from the (now advanced, content-less) view.
+        lastAnsweredView: { step: action.answeredStep, content: action.answeredContent },
       };
     case "TEACHING_FAILED":
       return { ...state, teachingPhase: "error", teachingError: action.error };
+    case "CURRICULUM_REFRESHED":
+      // Re-computed against live learner state (e.g. before a reteach); does
+      // not touch the teaching flow itself.
+      return { ...state, curriculum: action.curriculum };
+    case "REVIEW_START":
+      return {
+        ...state,
+        reviewRunPhase: "delivering",
+        reviewSession: { conceptIds: action.conceptIds, index: 0 },
+        reviewItem: null,
+        reviewAnswer: null,
+        reviewRunError: null,
+      };
+    case "REVIEW_DELIVERING":
+      return { ...state, reviewRunPhase: "delivering", reviewRunError: null };
+    case "REVIEW_DELIVERED":
+      return {
+        ...state,
+        reviewRunPhase: "active",
+        reviewItem: {
+          conceptId: action.conceptId,
+          title: action.title,
+          content: action.content,
+        },
+        reviewAnswer: null,
+      };
+    case "REVIEW_ANSWERING":
+      return { ...state, reviewRunPhase: "answering", reviewRunError: null };
+    case "REVIEW_ANSWERED":
+      return {
+        ...state,
+        reviewRunPhase: "active",
+        reviewAnswer: {
+          correct: action.correct,
+          explanation: action.explanation,
+          selectedOption: action.selectedOption,
+        },
+      };
+    case "REVIEW_NEXT": {
+      const session = state.reviewSession;
+      if (!session) return state;
+      const next = { ...session, index: session.index + 1 };
+      return {
+        ...state,
+        reviewSession: next,
+        reviewItem: null,
+        reviewAnswer: null,
+        reviewRunPhase: next.index >= next.conceptIds.length ? "completed" : "delivering",
+      };
+    }
+    case "REVIEW_FINISH":
+    case "REVIEW_CANCEL":
+      return {
+        ...state,
+        reviewRunPhase: action.type === "REVIEW_FINISH" ? "completed" : "idle",
+        reviewSession: null,
+        reviewItem: null,
+        reviewAnswer: null,
+        reviewRunError: null,
+      };
+    case "REVIEW_ERROR":
+      return { ...state, reviewRunPhase: "error", reviewRunError: action.error };
     default:
       return state;
   }

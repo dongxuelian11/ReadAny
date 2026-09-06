@@ -133,6 +133,14 @@ export async function deliverCurrentStep(
   return updated;
 }
 
+/** The deps answerCurrentStep actually uses (iter-2): grading is local — no
+ * book extraction, no model client. Hosts pass the narrow object so the
+ * answer path can never drag generation machinery along. */
+export type TeachingAnswerDeps = Pick<
+  TeachingEngineDeps,
+  "clock" | "evidence" | "mastery" | "reviews" | "teachings"
+>;
+
 /** Grade the current step's comprehension check deterministically, record the
  * evidence (BKT + FSRS move), and advance. Fail-closed on missing content,
  * duplicate answers, or inactive sessions. Crash-resumable (iter-1): if the
@@ -140,7 +148,7 @@ export async function deliverCurrentStep(
  * session resumes — the idempotent engine skips the already-applied event and
  * the advance completes. */
 export async function answerCurrentStep(
-  deps: TeachingEngineDeps,
+  deps: TeachingAnswerDeps,
   session: TeachingSession,
   selectedOption: number,
 ): Promise<TeachingSession> {

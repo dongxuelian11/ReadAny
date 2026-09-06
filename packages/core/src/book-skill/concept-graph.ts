@@ -78,18 +78,29 @@ export function frameworkConceptId(name: string): string {
 /** Edge relations that mean "you should understand `from` before `to`". */
 const PREREQUISITE_RELATIONS = new Set(["builds on", "requires"]);
 
-/** Language-variant aliases derived from a bilingual topic term: the latin
- * runs and the CJK runs, lowercased. 「费用 fees」 also answers to 「费用」 and
- * "fees" — how the deterministic merge bridges languages without a model. */
+/** Language-variant aliases derived from a bilingual topic term: the COMPLETE
+ * per-script segments, never word-level splits. 「费用 fees」 also answers to
+ * 「费用」 and "fees" — that is the deterministic cross-language bridge. But a
+ * single-script term is never decomposed: "machine learning" must not mint a
+ * "learning" alias that silently folds unrelated concepts together (iter-2
+ * stop-loss on PR-026's over-merging). */
 export function derivedAliases(term: string): string[] {
+  const normalized = normalizeConceptName(term);
+  // One segment per script run; consecutive latin words stay ONE segment.
+  const segments =
+    term.match(/[a-z0-9][a-z0-9'’-]*(?:\s+[a-z0-9][a-z0-9'’-]*)*|[\u4e00-\u9fff]+/gi) ?? [];
+  if (segments.length <= 1) {
+    // The term is single-script (or one reformatted unit): no derived aliases.
+    return [];
+  }
   const variants = new Set<string>();
-  for (const run of term.match(/[a-z0-9][a-z0-9'-]+/gi) ?? []) {
-    variants.add(run.toLowerCase());
+  for (const segment of segments) {
+    const variant = /[a-z0-9]/i.test(segment) ? segment.toLowerCase() : segment;
+    // Sub-2-character aliases over-merge ("a", "AI"-adjacent noise) — skip.
+    if (variant.length < 2) continue;
+    if (variant !== normalized) variants.add(variant);
   }
-  for (const run of term.match(/[\u4e00-\u9fff]+/g) ?? []) {
-    variants.add(run);
-  }
-  return [...variants].filter((variant) => variant !== normalizeConceptName(term));
+  return [...variants];
 }
 
 export async function buildConceptGraph(

@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+﻿import { Button } from "@/components/ui/button";
 import {
   getCurriculumForGoal,
   getGoalWorkspace,
@@ -11,6 +11,12 @@ import {
   getActivePlacement,
   startBookPlacement,
 } from "@/lib/learner/placement-trigger";
+import {
+  boundReviewQueue,
+  deliverReviewItem,
+  recordReviewEvidence,
+  REVIEW_QUEUE_LIMIT,
+} from "@/lib/learner/review-trigger";
 import {
   answerTeachingStep,
   deliverTeachingStep,
@@ -188,17 +194,31 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
   };
 
   const handleStartTeaching = async () => {
-    if (!state.curriculum) return;
     if (!aiConfig.activeModel) {
       dispatch({ type: "TEACHING_FAILED", error: t("learnerPanel.noAiConfig") });
       return;
     }
     dispatch({ type: "TEACHING_STARTING" });
     try {
-      let session = await startTeachingForBook(bookRef.current, state.curriculum);
-      dispatch({ type: "TEACHING_DELIVERING" });
-      session = await deliverTeachingStep(bookRef.current, session);
-      dispatch({ type: "TEACHING_DELIVERED", session });
+      // 閲嶆柊甯﹁鍓嶉噸绠楄绋嬶紙iter-2锛夛細绛旈浼氭敼鍙樺涔犵姸鎬侊紝缂撳瓨鐨勮绋嬪彲鑳?
+      // 宸茬粡杩囨湡銆傞噸绠楀け璐ュ垯閫€鍥炵幇鏈夎绋嬬户缁紝涓嶉樆濉炲甫璇汇€?
+      let curriculum = state.curriculum;
+      if (state.goal) {
+        try {
+          curriculum = await getCurriculumForGoal(state.goal);
+          dispatch({ type: "CURRICULUM_REFRESHED", curriculum });
+        } catch (error) {
+          console.warn("Failed to refresh curriculum before teaching:", error);
+        }
+      }
+      if (!curriculum) return;
+      const session = await startTeachingForBook(bookRef.current, curriculum);
+      // The session is persisted at this point (iter-2): dispatch it BEFORE
+      // generating the first step so a generation failure leaves a resumable
+      // session 鈥?the error card's retry re-delivers instead of no-oping.
+      dispatch({ type: "TEACHING_STARTED", session });
+      const delivered = await deliverTeachingStep(bookRef.current, session);
+      dispatch({ type: "TEACHING_DELIVERED", session: delivered });
     } catch (error) {
       dispatch({
         type: "TEACHING_FAILED",
@@ -234,12 +254,133 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
         session,
         correct,
         explanation: view.content.check.explanation,
+        answeredStep: view.step,
+        answeredContent: view.content,
       });
-      // Teaching moved BKT/FSRS — refresh an already-loaded mastery list.
+      // Teaching moved BKT/FSRS 鈥?refresh already-loaded lists (iter-2: the
+      // due-review list too; this answer may have scheduled the next review).
       if (state.masteryPhase === "ready") void loadMastery();
+      if (state.reviewPhase === "ready" || state.reviewPhase === "idle") void loadReview();
     } catch (error) {
       dispatch({
         type: "TEACHING_FAILED",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
+  // ---- Bounded due-review flow (iter-2) ----
+
+  const handleStartReview = async () => {
+    if (!aiConfig.activeModel) {
+      dispatch({ type: "REVIEW_ERROR", error: t("learnerPanel.noAiConfig") });
+      return;
+    }
+    // The review is planned from the freshest due list, not the rendered one.
+    try {
+      const rows = await getBookDueReviews(bookRef.current);
+      const conceptIds = boundReviewQueue(rows.map((row) => row.conceptId));
+      if (conceptIds.length === 0) {
+        dispatch({ type: "REVIEW_READY", rows: [] });
+        return;
+      }
+      dispatch({ type: "REVIEW_START", conceptIds });
+      const first = state.dueRows.find((row) => row.conceptId === conceptIds[0]);
+      const content = await deliverReviewItem(
+        bookRef.current,
+        conceptIds[0],
+        first?.title ?? conceptIds[0],
+      );
+      dispatch({
+        type: "REVIEW_DELIVERED",
+        conceptId: conceptIds[0],
+        title: first?.title ?? conceptIds[0],
+        content,
+      });
+    } catch (error) {
+      dispatch({
+        type: "REVIEW_ERROR",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
+  const handleDeliverReviewItem = async () => {
+    const session = state.reviewSession;
+    if (!session) return;
+    const conceptId = session.conceptIds[session.index];
+    if (!conceptId) return;
+    dispatch({ type: "REVIEW_DELIVERING" });
+    try {
+      const fallbackTitle = state.dueRows.find((row) => row.conceptId === conceptId)?.title;
+      const content = await deliverReviewItem(
+        bookRef.current,
+        conceptId,
+        fallbackTitle ?? conceptId,
+      );
+      dispatch({
+        type: "REVIEW_DELIVERED",
+        conceptId,
+        title: fallbackTitle ?? conceptId,
+        content,
+      });
+    } catch (error) {
+      dispatch({
+        type: "REVIEW_ERROR",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
+  const handleAnswerReviewItem = async (selectedOption: number) => {
+    const item = state.reviewItem;
+    if (!item) return;
+    const correct = selectedOption === item.content.check.correctIndex;
+    dispatch({ type: "REVIEW_ANSWERING" });
+    try {
+      // Durable-first evidence (iter-1 semantics): one attemptId per review
+      // answer; the resumable engine makes retries exactly-once.
+      await recordReviewEvidence(item.conceptId, correct, crypto.randomUUID());
+      dispatch({
+        type: "REVIEW_ANSWERED",
+        correct,
+        explanation: item.content.check.explanation,
+        selectedOption,
+      });
+      // The review moved BKT/FSRS 鈥?refresh already-loaded lists.
+      if (state.masteryPhase === "ready") void loadMastery();
+      if (state.reviewPhase === "ready") void loadReview();
+    } catch (error) {
+      dispatch({
+        type: "REVIEW_ERROR",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
+  const handleNextReviewItem = async () => {
+    dispatch({ type: "REVIEW_NEXT" });
+    const session = state.reviewSession;
+    if (!session) return;
+    const nextIndex = session.index + 1;
+    if (nextIndex >= session.conceptIds.length) return; // reducer flips to completed
+    const conceptId = session.conceptIds[nextIndex];
+    const fallbackTitle = state.dueRows.find((row) => row.conceptId === conceptId)?.title;
+    try {
+      const content = await deliverReviewItem(
+        bookRef.current,
+        conceptId,
+        fallbackTitle ?? conceptId,
+      );
+      dispatch({
+        type: "REVIEW_DELIVERED",
+        conceptId,
+        title: fallbackTitle ?? conceptId,
+        content,
+      });
+    } catch (error) {
+      dispatch({
+        type: "REVIEW_ERROR",
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -293,7 +434,7 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
     try {
       const verdict: PlacementVerdict = await finalizePlacementSession(state.session);
       dispatch({ type: "PLACEMENT_COMPLETED", verdict });
-      // Mastery data changed — refresh the list if it was already loaded.
+      // Mastery data changed 鈥?refresh the list if it was already loaded.
       if (state.masteryPhase === "ready") void loadMastery();
     } catch (error) {
       dispatch({
@@ -370,7 +511,19 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
           />
         )}
         {state.tab === "mastery" && <MasteryTab state={state} onRetry={loadMastery} />}
-        {state.tab === "review" && <ReviewTab state={state} onRetry={loadReview} />}
+        {state.tab === "review" && (
+          <ReviewTab
+            state={state}
+            onRetry={loadReview}
+            selectedOption={selectedOption}
+            onSelectOption={setSelectedOption}
+            onStartReview={handleStartReview}
+            onDeliverReviewItem={handleDeliverReviewItem}
+            onAnswerReviewItem={handleAnswerReviewItem}
+            onNextReviewItem={handleNextReviewItem}
+            onCancelReview={() => dispatch({ type: "REVIEW_CANCEL" })}
+          />
+        )}
       </div>
     </div>
   );
@@ -563,7 +716,7 @@ function VerdictView({
                 <span className="block truncate text-xs font-medium">{entry.conceptTitle}</span>
                 <span className="text-[11px] text-muted-foreground">
                   {formatPercent(entry.mastery)}
-                  {entry.tested ? "" : ` · ${t("learnerPanel.verdict.inferred")}`}
+                  {entry.tested ? "" : ` 路 ${t("learnerPanel.verdict.inferred")}`}
                 </span>
               </span>
               {chapterIndex !== null && (
@@ -622,9 +775,9 @@ function MasteryTab({
                 <span className="block truncate text-xs font-medium">{row.title}</span>
                 <span className="text-[11px] text-muted-foreground">
                   {row.mastery
-                    ? `${formatPercent(row.mastery.mastery)} · ${t(
+                    ? `${formatPercent(row.mastery.mastery)} 路 ${t(
                         `learnerPanel.status.${row.mastery.status}`,
-                      )}${row.mastery.evidenceCount > 0 ? ` · ${t("learnerPanel.mastery.evidence", { count: row.mastery.evidenceCount })}` : ""}`
+                      )}${row.mastery.evidenceCount > 0 ? ` 路 ${t("learnerPanel.mastery.evidence", { count: row.mastery.evidenceCount })}` : ""}`
                     : t("learnerPanel.status.unseen")}
                 </span>
               </span>
@@ -655,11 +808,147 @@ function MasteryTab({
 function ReviewTab({
   state,
   onRetry,
+  selectedOption,
+  onSelectOption,
+  onStartReview,
+  onDeliverReviewItem,
+  onAnswerReviewItem,
+  onNextReviewItem,
+  onCancelReview,
 }: {
   state: ReturnType<typeof learnerPanelReducer>;
   onRetry: () => void;
+  selectedOption: number | null;
+  onSelectOption: (index: number) => void;
+  onStartReview: () => void;
+  onDeliverReviewItem: () => void;
+  onAnswerReviewItem: (selectedOption: number) => void;
+  onNextReviewItem: () => void;
+  onCancelReview: () => void;
 }) {
   const { t } = useTranslation();
+  // An in-flight review replaces the due list: the same tab walks the queue.
+  // A run error keeps the queue visible (retry this item / end review).
+  if (state.reviewSession !== null && state.reviewRunPhase !== "idle") {
+    const session = state.reviewSession;
+    const item = state.reviewItem;
+    const answer = state.reviewAnswer;
+    const current = Math.min(session.index + 1, session.conceptIds.length);
+    return (
+      <section aria-labelledby="learner-review-heading">
+        <h2 id="learner-review-heading" className="text-sm font-semibold">
+          {t("learnerPanel.review.title")}
+        </h2>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          {t("learnerPanel.review.progress", {
+            current,
+            total: session.conceptIds.length,
+            limit: REVIEW_QUEUE_LIMIT,
+          })}
+        </p>
+
+        {state.reviewRunPhase === "delivering" && (
+          <p className="mt-4 text-xs leading-5 text-muted-foreground">
+            {t("learnerPanel.review.delivering")}
+          </p>
+        )}
+
+        {state.reviewRunPhase === "error" && (
+          <div className="mt-4">
+            <p className="text-xs leading-5 text-muted-foreground">{state.reviewRunError}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={onDeliverReviewItem}>
+                <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                {t("learnerPanel.review.retryItem")}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={onCancelReview}>
+                {t("learnerPanel.review.cancel")}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {(state.reviewRunPhase === "active" || state.reviewRunPhase === "answering") && item && (
+          <div className="mt-4 rounded-md border border-border/60 p-3">
+            <p className="text-sm font-medium leading-6">{item.title}</p>
+            {answer ? (
+              <div className="mt-3 border-l-2 border-primary/40 pl-3">
+                <p className="text-sm font-medium">
+                  {answer.correct
+                    ? t("learnerPanel.teaching.correct")
+                    : t("learnerPanel.teaching.incorrect")}
+                </p>
+                {!answer.correct && (
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    {t("learnerPanel.review.correctAnswer", {
+                      answer: item.content.check.options[item.content.check.correctIndex],
+                    })}
+                  </p>
+                )}
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  {answer.explanation}
+                </p>
+                <Button className="mt-3" size="sm" variant="outline" onClick={onNextReviewItem}>
+                  {current >= session.conceptIds.length
+                    ? t("learnerPanel.review.seeSummary")
+                    : t("learnerPanel.teaching.answered")}
+                  <ArrowRight className="ml-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                </Button>
+              </div>
+            ) : (
+              <>
+                <p className="mt-2 whitespace-pre-line text-xs leading-5 text-foreground/90">
+                  {item.content.explanation}
+                </p>
+                <p className="mt-3 text-sm font-medium leading-6">{item.content.check.prompt}</p>
+                <div className="mt-2 grid gap-2">
+                  {item.content.check.options.map((option, index) => (
+                    <button
+                      key={`${item.conceptId}-${index}`}
+                      type="button"
+                      className={`rounded-md border px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                        selectedOption === index
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:bg-muted/50"
+                      }`}
+                      aria-pressed={selectedOption === index}
+                      onClick={() => onSelectOption(index)}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+                <Button
+                  className="mt-3"
+                  size="sm"
+                  disabled={selectedOption === null || state.reviewRunPhase === "answering"}
+                  onClick={() => onAnswerReviewItem(selectedOption ?? 0)}
+                >
+                  {t("learnerPanel.teaching.submit")}
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+
+        {state.reviewRunPhase === "completed" && (
+          <div className="mt-4 rounded-md border border-primary/30 bg-primary/5 p-3">
+            <p className="flex items-center gap-1.5 text-xs font-semibold">
+              <CircleCheck className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+              {t("learnerPanel.review.done")}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              {t("learnerPanel.review.doneNote")}
+            </p>
+            <Button className="mt-3" size="sm" variant="outline" onClick={onRetry}>
+              {t("learnerPanel.review.refresh")}
+            </Button>
+          </div>
+        )}
+      </section>
+    );
+  }
+
   return (
     <section aria-labelledby="learner-review-heading">
       <h2 id="learner-review-heading" className="text-sm font-semibold">
@@ -670,8 +959,17 @@ function ReviewTab({
       )}
       {state.reviewPhase === "error" && (
         <div className="mt-3">
-          <p className="text-xs leading-5 text-muted-foreground">{state.error}</p>
+          <p className="text-xs leading-5 text-muted-foreground">{state.reviewRunError}</p>
           <Button className="mt-3" size="sm" variant="outline" onClick={onRetry}>
+            <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+            {t("learnerPanel.retry")}
+          </Button>
+        </div>
+      )}
+      {state.reviewRunPhase === "error" && state.reviewSession === null && (
+        <div className="mt-3">
+          <p className="text-xs leading-5 text-muted-foreground">{state.reviewRunError}</p>
+          <Button className="mt-3" size="sm" variant="outline" onClick={onStartReview}>
             <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
             {t("learnerPanel.retry")}
           </Button>
@@ -683,26 +981,38 @@ function ReviewTab({
         </p>
       )}
       {state.reviewPhase === "ready" && state.dueRows.length > 0 && (
-        <ul className="mt-3 divide-y divide-border/40">
-          {state.dueRows.map((row) => (
-            <li key={row.conceptId} className="py-2">
-              <span className="block truncate text-xs font-medium">
-                {row.title ?? row.conceptId}
-              </span>
-              <span className="text-[11px] text-muted-foreground">
-                {t("learnerPanel.review.dueAt", {
-                  date: new Date(row.due).toLocaleDateString(),
-                })}
-                {row.mastery !== null ? ` · ${formatPercent(row.mastery)}` : ""}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <>
+          <p className="mt-3 text-xs leading-5 text-muted-foreground">
+            {t("learnerPanel.review.dueCount", {
+              count: state.dueRows.length,
+              limit: REVIEW_QUEUE_LIMIT,
+            })}
+          </p>
+          <ul className="mt-1 divide-y divide-border/40">
+            {state.dueRows.slice(0, REVIEW_QUEUE_LIMIT).map((row) => (
+              <li key={row.conceptId} className="py-2">
+                <span className="block truncate text-xs font-medium">
+                  {row.title ?? row.conceptId}
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  {t("learnerPanel.review.dueAt", {
+                    date: new Date(row.due).toLocaleDateString(),
+                  })}
+                  {row.mastery !== null ? ` 路 ${formatPercent(row.mastery)}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <Button className="mt-3" size="sm" onClick={onStartReview}>
+            <Play className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+            {t("learnerPanel.review.start")}
+          </Button>
+        </>
       )}
       {state.reviewPhase === "ready" && (
         <button
           type="button"
-          className="mt-3 text-xs text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="mt-3 block text-xs text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={onRetry}
         >
           {t("learnerPanel.review.refresh")}
@@ -901,7 +1211,7 @@ function GoalTab({
                     <span className="min-w-0">
                       <span className="block truncate text-xs font-medium">{step.title}</span>
                       <span className="text-[11px] text-muted-foreground">
-                        {t(`learnerPanel.goal.reason.${step.kind}`)} ·{" "}
+                        {t(`learnerPanel.goal.reason.${step.kind}`)} 路{" "}
                         {t(`learnerPanel.goal.depth.${step.depth}`)}
                       </span>
                     </span>
@@ -1018,29 +1328,53 @@ function TeachingSection({
 
   if (phase === "completed") {
     return (
-      <div className="mt-4 rounded-md border border-primary/30 bg-primary/5 p-3">
-        <p className="flex items-center gap-1.5 text-xs font-semibold">
-          <CircleCheck className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
-          {t("learnerPanel.teaching.completed")}
-        </p>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          {t("learnerPanel.teaching.completedNote")}
-        </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" onClick={() => onOpenTab("mastery")}>
-            {t("learnerPanel.teaching.viewMastery")}
-          </Button>
-          <Button size="sm" variant="ghost" onClick={onStartTeaching}>
-            <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-            {t("learnerPanel.goal.reteach")}
-          </Button>
+      <>
+        {state.lastStepAnswer && state.lastAnsweredView && (
+          <StepFeedbackCard
+            state={state}
+            title={state.lastAnsweredView.step.title}
+            progress={null}
+            onNext={null}
+          />
+        )}
+        <div className="mt-4 rounded-md border border-primary/30 bg-primary/5 p-3">
+          <p className="flex items-center gap-1.5 text-xs font-semibold">
+            <CircleCheck className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+            {t("learnerPanel.teaching.completed")}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {t("learnerPanel.teaching.completedNote")}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => onOpenTab("mastery")}>
+              {t("learnerPanel.teaching.viewMastery")}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={onStartTeaching}>
+              <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+              {t("learnerPanel.goal.reteach")}
+            </Button>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   // phase === "active"
   if (!teachingStep) return null;
+
+  // Feedback first (iter-2): after answering, the session already points at
+  // the next (content-less) step 鈥?the verdict and explanation for the step
+  // the learner JUST answered must render before any "next step" affordance.
+  if (state.lastStepAnswer && state.lastAnsweredView) {
+    return (
+      <StepFeedbackCard
+        state={state}
+        title={state.lastAnsweredView.step.title}
+        progress={t("learnerPanel.teaching.progress", { current: current - 1, total })}
+        onNext={onDeliverStep}
+      />
+    );
+  }
 
   if (!teachingView) {
     // A resumed session whose current step has no content yet.
@@ -1072,74 +1406,103 @@ function TeachingSection({
       </div>
       <p className="mt-1 text-sm font-medium leading-6">{step.title}</p>
 
-      {state.lastStepAnswer && (
-        <div className="mt-3 border-l-2 border-primary/40 pl-3">
-          <p className="text-sm font-medium">
-            {state.lastStepAnswer.correct
-              ? t("learnerPanel.teaching.correct")
-              : t("learnerPanel.teaching.incorrect")}
-          </p>
+      <>
+        <p className="mt-2 whitespace-pre-line text-xs leading-5 text-foreground/90">
+          {content.explanation}
+        </p>
+        {content.keyPoints.length > 0 && (
+          <ul className="mt-2 space-y-1">
+            {content.keyPoints.map((point) => (
+              <li key={point} className="flex gap-1.5 text-xs leading-5 text-muted-foreground">
+                <span
+                  className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-primary/70"
+                  aria-hidden="true"
+                />
+                {point}
+              </li>
+            ))}
+          </ul>
+        )}
+        {content.workedExample && (
+          <blockquote className="mt-2 border-l-2 border-border pl-3 text-xs leading-5 text-muted-foreground">
+            {content.workedExample}
+          </blockquote>
+        )}
+        <p className="mt-3 text-sm font-medium leading-6">{content.check.prompt}</p>
+        <div className="mt-2 grid gap-2">
+          {content.check.options.map((option, index) => (
+            <button
+              key={`${step.conceptId}-${index}`}
+              type="button"
+              className={`rounded-md border px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                selectedOption === index
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:bg-muted/50"
+              }`}
+              aria-pressed={selectedOption === index}
+              onClick={() => onSelectOption(index)}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+        <Button
+          className="mt-3"
+          size="sm"
+          disabled={selectedOption === null}
+          onClick={() => onAnswerStep(selectedOption ?? 0)}
+        >
+          {t("learnerPanel.teaching.submit")}
+        </Button>
+      </>
+    </div>
+  );
+}
+
+/** The verdict card for the step the learner JUST answered (iter-2). Rendered
+ * from the answered-step snapshot: for the last step the session has already
+ * flipped to completed, and mid-session the live view points at the next
+ * content-less step 鈥?neither can show this feedback themselves. */
+function StepFeedbackCard({
+  state,
+  title,
+  progress,
+  onNext,
+}: {
+  state: ReturnType<typeof learnerPanelReducer>;
+  title: string;
+  progress: string | null;
+  onNext: (() => void) | null;
+}) {
+  const { t } = useTranslation();
+  const answer = state.lastStepAnswer;
+  const answeredView = state.lastAnsweredView;
+  if (!answer || !answeredView) return null;
+  const correctOption =
+    answeredView.content.check.options[answeredView.content.check.correctIndex];
+  return (
+    <div className="mt-4 rounded-md border border-border/60 p-3">
+      {progress && <p className="text-[11px] text-muted-foreground">{progress}</p>}
+      <p className="mt-1 text-sm font-medium leading-6">{title}</p>
+      <div className="mt-3 border-l-2 border-primary/40 pl-3">
+        <p className="text-sm font-medium">
+          {answer.correct
+            ? t("learnerPanel.teaching.correct")
+            : t("learnerPanel.teaching.incorrect")}
+        </p>
+        {!answer.correct && (
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            {state.lastStepAnswer.explanation}
+            {t("learnerPanel.review.correctAnswer", { answer: correctOption })}
           </p>
-          <Button className="mt-3" size="sm" variant="outline" onClick={onDeliverStep}>
+        )}
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">{answer.explanation}</p>
+        {onNext && (
+          <Button className="mt-3" size="sm" variant="outline" onClick={onNext}>
             {t("learnerPanel.teaching.answered")}
             <ArrowRight className="ml-1.5 h-3.5 w-3.5" aria-hidden="true" />
           </Button>
-        </div>
-      )}
-
-      {!state.lastStepAnswer && (
-        <>
-          <p className="mt-2 whitespace-pre-line text-xs leading-5 text-foreground/90">
-            {content.explanation}
-          </p>
-          {content.keyPoints.length > 0 && (
-            <ul className="mt-2 space-y-1">
-              {content.keyPoints.map((point) => (
-                <li key={point} className="flex gap-1.5 text-xs leading-5 text-muted-foreground">
-                  <span
-                    className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-primary/70"
-                    aria-hidden="true"
-                  />
-                  {point}
-                </li>
-              ))}
-            </ul>
-          )}
-          {content.workedExample && (
-            <blockquote className="mt-2 border-l-2 border-border pl-3 text-xs leading-5 text-muted-foreground">
-              {content.workedExample}
-            </blockquote>
-          )}
-          <p className="mt-3 text-sm font-medium leading-6">{content.check.prompt}</p>
-          <div className="mt-2 grid gap-2">
-            {content.check.options.map((option, index) => (
-              <button
-                key={`${step.conceptId}-${index}`}
-                type="button"
-                className={`rounded-md border px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                  selectedOption === index
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:bg-muted/50"
-                }`}
-                aria-pressed={selectedOption === index}
-                onClick={() => onSelectOption(index)}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
-          <Button
-            className="mt-3"
-            size="sm"
-            disabled={selectedOption === null}
-            onClick={() => onAnswerStep(selectedOption ?? 0)}
-          >
-            {t("learnerPanel.teaching.submit")}
-          </Button>
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 }
