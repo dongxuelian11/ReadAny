@@ -18,8 +18,12 @@ const STATUS_SEVERITY: Record<MasteryStatus, number> = {
 
 export interface ProjectedConceptState {
   conceptId: string;
-  /** Evidence-weighted mean of the participating chapters' current mastery;
-   * null when no participating chapter has any state. */
+  /** ESTIMATED FROM CHAPTER PERFORMANCE (iter-2 labeling): this value is
+   * inferred from the participating chapters' practice records — it is NOT a
+   * directly measured concept mastery, and any future UI must present it as
+   * an estimate ("由章节表现估计"), never as a measured fact. Evidence-weighted
+   * mean of the participating chapters' current mastery; null when no
+   * participating chapter has any state. */
   mastery: number | null;
   /** The WORST current status across participating chapters — forgetting in
    * any one chapter means the concept needs review. */

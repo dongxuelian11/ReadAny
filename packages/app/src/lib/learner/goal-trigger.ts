@@ -14,8 +14,6 @@ import {
   createSqliteLearnerStores,
   ensureChapterConceptIdentity,
   getLearnerStateAt,
-  orderStepsByPrerequisites,
-  parseChapterSourceUnit,
   parseGoal,
   putGoalWithSupersession,
   toGoalSpec,
@@ -94,7 +92,15 @@ export async function getActiveGoal(book: Book): Promise<GoalSpec | null> {
 /** Rebuild the deterministic curriculum for a goal against the current learner
  * state (pure computation — safe to call any time). The learner state comes
  * from the current-instant read model (PR-013): gap classification must see
- * forgetting at read time, not the stale persisted status. */
+ * forgetting at read time, not the stale persisted status.
+ *
+ * Iter-2: the PR-026 prerequisite reordering is DISABLED for the product
+ * path. Its edge mining treats "two chapters share a concept" as a
+ * prerequisite — mutual edges are common, real prerequisite relations are
+ * never read — so the topo-sort either cyclically falls back to book order or
+ * silently permutes steps on co-occurrence. Until explicit prerequisite edges
+ * are wired (listRelated + framework→chapter mapping, iter-3), the curriculum
+ * keeps the book's own order, which is the honest default. */
 export async function getCurriculumForGoal(goal: GoalSpec): Promise<PersonalCurriculum> {
   const deps = await createGoalEngineDeps();
   const states = await getLearnerStateAt(
@@ -115,29 +121,7 @@ export async function getCurriculumForGoal(goal: GoalSpec): Promise<PersonalCurr
       : null;
     entries.push(classifyGap(chapter, learner));
   }
-  const curriculum = buildCurriculum(goal, entries, deps.clock.now().getTime());
-  // PR-026: prerequisite-aware reordering — mine the concept registry for
-  // "chapter A participates in a concept that requires chapter B's concept"
-  // pairs restricted to this goal's chapters, then let the pure core
-  // topological reorder run (book order preserved otherwise).
-  const chapterIndexes = new Set(
-    goal.chapters
-      .map((chapter) => parseChapterSourceUnit(chapter.conceptId)?.chapterIndex)
-      .filter((index): index is number => index !== undefined),
-  );
-  const edges: Array<{ before: number; after: number }> = [];
-  for (const chapter of goal.chapters) {
-    const after = parseChapterSourceUnit(chapter.conceptId)?.chapterIndex;
-    if (after === undefined) continue;
-    for (const conceptId of await deps.identity.listConceptsForSourceUnit(chapter.conceptId)) {
-      for (const unit of await deps.identity.listSourceUnitsForConcept(conceptId)) {
-        const before = parseChapterSourceUnit(unit)?.chapterIndex;
-        if (before === undefined || before === after || !chapterIndexes.has(before)) continue;
-        edges.push({ before, after });
-      }
-    }
-  }
-  return { ...curriculum, steps: orderStepsByPrerequisites(curriculum.steps, edges) };
+  return buildCurriculum(goal, entries, deps.clock.now().getTime());
 }
 
 export interface GoalWorkspace {
@@ -149,7 +133,12 @@ export interface GoalWorkspace {
 
 /** The full goal workspace for a book: active goal + curriculum rebuilt
  * against the current learner state (PR-013 read model) + any resumable
- * teaching session. Null when the book has no active goal. */
+ * teaching session. Null when the book has no active goal.
+ *
+ * Iter-2: the restored session must belong to THIS goal. Supersession only
+ * deactivates the old Goal row — the old TeachingSession row stays "active"
+ * in the store, so a bookId-only check used to resurrect a previous goal's
+ * stale session (wrong curriculum, wrong progress) after the goal changed. */
 export async function getGoalWorkspace(book: Book): Promise<GoalWorkspace | null> {
   const goal = await getActiveGoal(book);
   if (!goal) return null;
@@ -159,6 +148,11 @@ export async function getGoalWorkspace(book: Book): Promise<GoalWorkspace | null
     goal,
     curriculum,
     teaching:
-      teaching && teaching.status === "active" && teaching.bookId === book.id ? teaching : null,
+      teaching &&
+      teaching.status === "active" &&
+      teaching.bookId === book.id &&
+      teaching.goalId === goal.goalId
+        ? teaching
+        : null,
   };
 }

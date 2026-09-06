@@ -337,7 +337,17 @@
       "title": "到期複習",
       "empty": "目前沒有到期的複習。",
       "dueAt": "{{date}} 到期",
-      "refresh": "重新整理"
+      "refresh": "重新整理",
+      "start": "開始複習",
+      "dueCount": "共 {{count}} 項到期（本輪最多複習 {{limit}} 項）",
+      "delivering": "正在產生複習內容…",
+      "progress": "第 {{current}} / {{total}} 項",
+      "correctAnswer": "正確答案：{{answer}}",
+      "retryItem": "重試本題",
+      "cancel": "結束複習",
+      "seeSummary": "完成複習",
+      "done": "本輪複習完成",
+      "doneNote": "每一次作答都已計入掌握度與複習排程。"
     },
     "status": {
       "unseen": "未接觸",
