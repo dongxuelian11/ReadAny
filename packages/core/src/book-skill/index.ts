@@ -11,3 +11,4 @@ export * from "./llm";
 export * from "./cross-book";
 export * from "./semantic-routing";
 export * from "./ask-history";
+export * from "./concept-graph";

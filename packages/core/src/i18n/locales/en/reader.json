@@ -281,6 +281,12 @@
       "unparsed": "The synthesizer skipped the claim check for this answer.",
       "history": "Recent asks",
       "rerun": "Ask again"
+    },
+    "graph": {
+      "title": "Shelf concepts",
+      "summary": "{{total}} concepts registered · {{cross}} span multiple books",
+      "books": "{{count}} book(s)",
+      "empty": "No cross-book concepts yet — a concept appears here once the same term shows up in two or more books."
     }
   },
   "learnerPanel": {

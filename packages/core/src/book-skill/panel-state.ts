@@ -8,6 +8,7 @@
 // to the panel session, not to any single book).
 
 import type { StoredAskAnswer } from "./ask-history";
+import type { CrossBookConcept } from "./concept-graph";
 import type { CrossBookAnswer } from "./cross-book";
 import type { BookSkillCostEstimate } from "./estimate";
 import type { BookSkillGenre, BookSkillProgress, BookSkillResult } from "./types";
@@ -40,6 +41,9 @@ export interface BookSkillPanelState {
   askError: string | null;
   // Persisted ask history (PR-020), newest first
   askHistory: StoredAskAnswer[];
+  // Concept graph V2 (PR-024): shelf-wide cross-book concepts, null until the
+  // first build completes for this panel session.
+  conceptGraph: { totalConcepts: number; crossBook: CrossBookConcept[] } | null;
 }
 
 export type BookSkillPanelAction =
@@ -57,7 +61,8 @@ export type BookSkillPanelAction =
   | { type: "ASK_START" }
   | { type: "ASK_READY"; answer: CrossBookAnswer }
   | { type: "ASK_ERROR"; error: string }
-  | { type: "ASK_HISTORY_READY"; entries: StoredAskAnswer[] };
+  | { type: "ASK_HISTORY_READY"; entries: StoredAskAnswer[] }
+  | { type: "CONCEPT_GRAPH_READY"; totalConcepts: number; crossBook: CrossBookConcept[] };
 
 export const initialBookSkillPanelState: BookSkillPanelState = {
   phase: "idle",
@@ -72,6 +77,7 @@ export const initialBookSkillPanelState: BookSkillPanelState = {
   askAnswer: null,
   askError: null,
   askHistory: [],
+  conceptGraph: null,
 };
 
 export function bookSkillPanelReducer(
@@ -139,6 +145,11 @@ export function bookSkillPanelReducer(
       return { ...state, askPhase: "error", askError: action.error };
     case "ASK_HISTORY_READY":
       return { ...state, askHistory: action.entries };
+    case "CONCEPT_GRAPH_READY":
+      return {
+        ...state,
+        conceptGraph: { totalConcepts: action.totalConcepts, crossBook: action.crossBook },
+      };
     default:
       return state;
   }

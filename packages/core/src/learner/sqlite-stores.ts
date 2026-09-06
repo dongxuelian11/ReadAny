@@ -666,4 +666,35 @@ export class SqliteConceptIdentityStore implements ConceptIdentityStore {
       createdAt: Number(row.created_at),
     }));
   }
+
+  async bindConceptSourceUnit(conceptId: string, sourceUnitId: string): Promise<void> {
+    const database = await this.db();
+    await runWithDbRetry(() =>
+      database.execute(
+        "INSERT OR IGNORE INTO learner_concept_participations (concept_id, source_unit_id) VALUES (?, ?)",
+        [conceptId, sourceUnitId],
+      ),
+    );
+  }
+
+  async listConceptsForSourceUnit(sourceUnitId: string): Promise<string[]> {
+    const database = await this.db();
+    const rows = await database.select<{ concept_id: string }>(
+      "SELECT concept_id FROM learner_concept_participations WHERE source_unit_id = ? ORDER BY concept_id ASC",
+      [sourceUnitId],
+    );
+    return rows.map((row) => String(row.concept_id));
+  }
+
+  async listConcepts(): Promise<ConceptRecord[]> {
+    const database = await this.db();
+    const rows = await database.select<Record<string, unknown>>(
+      "SELECT concept_id, display_name, created_at FROM learner_concepts ORDER BY created_at ASC, concept_id ASC",
+    );
+    return rows.map((row) => ({
+      conceptId: String(row.concept_id),
+      displayName: String(row.display_name),
+      createdAt: Number(row.created_at),
+    }));
+  }
 }
