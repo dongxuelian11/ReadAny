@@ -107,12 +107,25 @@ this file plus the latest `.codex/PRxxx_STATE_LEDGER.md` to resume.
   verified/unverified badges + broadcast/failed/unparsed notes.
   VISUAL_EVIDENCE = NOT_RUN (carry-forward).
 
-## Final status (2026-09-06): all nine review items addressed at the scoped V1 level
+## Final status (2026-09-06): route complete
 
-Remaining carry-forwards (non-blocking, recorded in the ledgers): a
-VISUAL_EVIDENCE screenshot pass for the accumulated UI work; curriculum
-`reason` localization (core i18n refactor); concept-identity V2 (cross-book
-merging via the registry); cross-book answer persistence/history.
+All nine review items are addressed, and every recorded carry-forward has
+been delivered:
+
+- [x] Cross-book ask persistence & reopenable history — **PR-020 (#20)**.
+- [x] Curriculum `reason` localization — **PR-021 (#21)**.
+- [x] Ask re-run affordance — **PR-022 (#22)**.
+- [x] VISUAL_EVIDENCE live-app capture — **PR-023 (#23)** (`docs/evidence/pr016-022/`;
+      LLM-driven flows honestly recorded as not exercised — need a configured
+      endpoint; their state machines are covered by the unit suites).
+- [x] Concept identity V2 — **PR-024 (#24)**: cross-book concepts folded
+      deterministically from Book Skill Tier-1 (zero LLM calls), N:M chapter
+      participation, prerequisite/related relations from concept-map edges,
+      跨书概念 panel section. Learner state deliberately stays chapter-scoped.
+
+Remaining future candidates (none scheduled): learner-state projection onto
+canonical concepts; semantic/cross-language concept merging;
+prerequisite-aware curriculum reordering (the graph consumer).
 
 - [x] **PR-019 — GitHub authority** (done ahead of sequence): ruleset 22335539
   on main — PR + 4 required blocking checks + no force push/deletion, no
