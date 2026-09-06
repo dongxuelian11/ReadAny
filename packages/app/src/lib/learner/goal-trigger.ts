@@ -11,9 +11,11 @@ import { createBookSkillLlmClient } from "@readany/core/book-skill";
 import {
   buildCurriculum,
   classifyGap,
+  collectPrerequisiteEdges,
   createSqliteLearnerStores,
   ensureChapterConceptIdentity,
   getLearnerStateAt,
+  orderStepsByPrerequisites,
   parseGoal,
   putGoalWithSupersession,
   toGoalSpec,
@@ -94,13 +96,12 @@ export async function getActiveGoal(book: Book): Promise<GoalSpec | null> {
  * from the current-instant read model (PR-013): gap classification must see
  * forgetting at read time, not the stale persisted status.
  *
- * Iter-2: the PR-026 prerequisite reordering is DISABLED for the product
- * path. Its edge mining treats "two chapters share a concept" as a
- * prerequisite — mutual edges are common, real prerequisite relations are
- * never read — so the topo-sort either cyclically falls back to book order or
- * silently permutes steps on co-occurrence. Until explicit prerequisite edges
- * are wired (listRelated + framework→chapter mapping, iter-3), the curriculum
- * keeps the book's own order, which is the honest default. */
+ * Iter-3 (review item F): prerequisite ordering is back, but only over
+ * EXPLICIT relations — collectPrerequisiteEdges reads the registry's
+ * "prerequisite" relations (framework/topic → chapter participation bindings
+ * decide which chapters an edge connects) restricted to this goal's chapters.
+ * Co-occurrence no longer creates edges; orderStepsByPrerequisites keeps the
+ * book-order fallback for cycles. */
 export async function getCurriculumForGoal(goal: GoalSpec): Promise<PersonalCurriculum> {
   const deps = await createGoalEngineDeps();
   const states = await getLearnerStateAt(
@@ -121,7 +122,12 @@ export async function getCurriculumForGoal(goal: GoalSpec): Promise<PersonalCurr
       : null;
     entries.push(classifyGap(chapter, learner));
   }
-  return buildCurriculum(goal, entries, deps.clock.now().getTime());
+  const curriculum = buildCurriculum(goal, entries, deps.clock.now().getTime());
+  const edges = await collectPrerequisiteEdges(
+    deps.identity,
+    goal.chapters.map((chapter) => chapter.conceptId),
+  );
+  return { ...curriculum, steps: orderStepsByPrerequisites(curriculum.steps, edges) };
 }
 
 export interface GoalWorkspace {
