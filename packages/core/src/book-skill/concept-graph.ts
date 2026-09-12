@@ -176,6 +176,9 @@ export async function buildConceptGraph(
 
     // Framework concepts: the concept-map nodes; edges resolve between the
     // framework concepts of the SAME book (names are book-scoped in Tier-1).
+    // Iter-3 (review item F): each node is bound to the chapter that
+    // introduces it, so explicit prerequisite edges between frameworks can
+    // project onto teaching chapters (collectPrerequisiteEdges).
     const frameworkIdByName = new Map<string, string>();
     for (const node of skill.tier1.nodes) {
       const name = node.name.trim();
@@ -184,6 +187,15 @@ export async function buildConceptGraph(
       frameworkIdByName.set(node.name, conceptId);
       await store.registerConcept({ conceptId, displayName: name, createdAt: now });
       summary.frameworkConcepts += 1;
+      const chapterIndex = chapterIndexByNumber.get(node.chapter);
+      if (chapterIndex === undefined) {
+        summary.warnings.push(
+          `Framework "${name}" points at unknown book_number "${node.chapter}" in ${skill.bookId}`,
+        );
+        continue;
+      }
+      await store.bindConceptSourceUnit(conceptId, sourceUnitId(skill.bookId, chapterIndex));
+      summary.sourceUnitBindings += 1;
     }
 
     for (const edge of skill.tier1.edges) {
