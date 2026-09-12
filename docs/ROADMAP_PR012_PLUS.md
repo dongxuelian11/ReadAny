@@ -139,3 +139,54 @@ All three graph candidates were completed in PR-026 (#26): alias-driven + langua
   files you touched.
 - Branch `main` must never be pushed locally; all work goes through PRs that
   the repo owner merges (now enforced by the ruleset).
+
+## Use-first iterations (2026-09-06, external review plan)
+
+The 2026-09-06 external review (docs/PLAN_USE_FIRST_20260906.md) re-baselined
+the project on "make the daily loop trustworthy first". Delivered:
+
+- [x] **PR-027 — idempotent learner commit** (`feat/pr027-idempotent-learner-commit`):
+  No transaction primitive exists on the platform adapters, so the commit
+  boundary is per-step idempotent markers instead: review card + mastery rows
+  carry lastEventId, review logs are event-id-keyed (partial unique index);
+  engine apply is resumable (duplicate id with same content resumes,
+  EvidenceConflictError on real conflicts); the answer timestamp is pinned at
+  enqueue and drives every derivation; quiz evidence ids are attempt-scoped
+  (re-answering counts, re-submitting does not); user confirmation is pure
+  metadata (no second BKT/FSRS); teaching answers resume after a crash
+  between evidence and session advance; one-time VACUUM INTO backup before
+  the marker migration. Real-SQLite interrupt/reopen/replay test in
+  packages/cli.
+  **Merged 2026-09-06 as PR #27** (merge commit `4717f9bc`); four blocking
+  gates PASS on head `05b99023` (quality 98 files / 760 tests).
+- [x] **PR-028 — daily learning loop** (`feat/pr028-daily-learning-loop`):
+  TEACHING_STARTED persists the session into panel state BEFORE first-step
+  generation (error retry works); TEACHING_ANSWERED snapshots the answered
+  step (lastAnsweredView) so feedback renders before the no-content early
+  return and inside the completed card; goal restore checks teaching.goalId;
+  curriculum recomputed before reteach; due-review list refreshes after
+  answers; bounded review flow (REVIEW_QUEUE_LIMIT=20) with the same
+  generate → answer → evidence path (source REVIEW, deterministic_keyed);
+  answer deps split from generation deps (TeachingAnswerDeps, per-book
+  extraction cache); derived aliases are complete per-script segments only
+  (no word-level over-merge); concept projection documented as ESTIMATED FROM
+  CHAPTER PERFORMANCE; en/zh/zh-TW strings.
+  **Merged 2026-09-06 as PR #28** (merge commit `2181ad98`); four blocking
+  gates PASS on head `fc4ac930` (quality 99 files / 771 tests).
+- [x] **PR-029 — citation locatability + alias conflict safety**
+  (`feat/pr029-crossbook-refvalid-alias`): ReportClaim.verified renamed to
+  referencesResolved; refs resolve only against successful, non-refused
+  synthesis sources; ask-history normalizes legacy rows; alias binding is
+  add-only (first wins) with kept-not-rebound warnings.
+- [x] **PR-030 — prerequisite ordering over explicit relations**
+  (`feat/pr030-prerequisite-wiring`): framework nodes bind to their chapters;
+  new collectPrerequisiteEdges reads ONLY explicit prerequisite relations
+  (direction contract, dedupe, book/goal scope); goal trigger re-enables
+  ordering with the book-order cycle fallback; adapter-to-ordering wiring
+  tests through a real buildConceptGraph registry.
+
+Trial package (iterations 1+2):
+`dist-trial/ReadAny_1.3.5_trial_fc4ac930-setup.exe` + TRIAL_NOTES.md
+(manual acceptance checklist). Iteration 3 remainders (quality-of-teaching
+tuning, alias candidate/confirmed separation, deeper projection) stay
+unscheduled until real-usage feedback.
