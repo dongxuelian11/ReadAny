@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import {
   type InstalledBookSkill,
   askAcrossBooks,
@@ -176,7 +176,7 @@ describe("per-book grounded answers and synthesis", () => {
 });
 
 describe("grounded report contract (PR-017)", () => {
-  it("mechanically verifies claim refs against installed skills", () => {
+  it("mechanically resolves claim refs against the candidate skills", () => {
     const bogle = skill("bogle", SKILL_MD_A, [
       { bookNumber: "ch01", title: "Costs", toolkit: "t" },
       { bookNumber: "ch02", title: "Allocation", toolkit: "t" },
@@ -197,17 +197,84 @@ describe("grounded report contract (PR-017)", () => {
       ],
       [bogle],
     );
-    expect(claims[0].verified).toBe(true);
-    expect(claims[1].verified).toBe(false);
+    expect(claims[0].referencesResolved).toBe(true);
+    expect(claims[1].referencesResolved).toBe(false);
     expect(claims[1].refs).toEqual([]);
-    expect(claims[2].verified).toBe(false);
-    expect(claims[3].verified).toBe(false);
+    expect(claims[2].referencesResolved).toBe(false);
+    expect(claims[3].referencesResolved).toBe(false);
     // Invalid refs are dropped; the surviving one is kept on the claim.
     expect(claims[3].refs).toEqual([{ slug: "bogle", bookNumber: "ch02" }]);
-    expect(claims[4].verified).toBe(false);
+    expect(claims[4].referencesResolved).toBe(false);
   });
 
-  it("parses a JSON synthesis into verified claims and keeps the essay", async () => {
+  it("does not resolve refs into a book whose grounded call FAILED (iter-3 H)", async () => {
+    const skills = [
+      skill("bogle", SKILL_MD_A, [{ bookNumber: "ch01", title: "Costs", toolkit: "t" }]),
+      skill("housel", SKILL_MD_B),
+    ];
+    const llm = {
+      async complete(system: string, user: string) {
+        if (system.includes("ONLY the book")) {
+          if (user.includes("bogle")) return "Fees compound [bogle ch01].";
+          throw new Error("grounded call failed");
+        }
+        return JSON.stringify({
+          synthesis: "Fees matter [bogle ch01]. Fear is costly [housel ch01].",
+          claims: [
+            { text: "Fees compound.", refs: [{ slug: "bogle", bookNumber: "ch01" }] },
+            { text: "Fear claim.", refs: [{ slug: "housel", bookNumber: "ch01" }] },
+          ],
+        });
+      },
+    };
+    const answer = await askAcrossBooks({
+      skills,
+      question: "随便聊聊 生命的意义 meaning of life",
+      llm,
+    });
+    expect(answer.report.failedSlugs).toEqual(["housel"]);
+    expect(answer.report.claims).toHaveLength(2);
+    expect(answer.report.claims[0].referencesResolved).toBe(true);
+    // The failed book never reached the synthesizer: its refs are dropped and
+    // the claim is not citation-resolved.
+    expect(answer.report.claims[1].referencesResolved).toBe(false);
+    expect(answer.report.claims[1].refs).toEqual([]);
+  });
+
+  it("does not resolve refs into a book that refused OUT OF SCOPE (iter-3 H)", async () => {
+    const skills = [
+      skill("bogle", SKILL_MD_A, [{ bookNumber: "ch01", title: "Costs", toolkit: "t" }]),
+      skill("housel", SKILL_MD_B, [{ bookNumber: "ch01", title: "Risk", toolkit: "t" }]),
+    ];
+    const llm = {
+      async complete(system: string, user: string) {
+        if (system.includes("ONLY the book")) {
+          if (user.includes("bogle")) return "Fees compound [bogle ch01].";
+          return "OUT OF SCOPE";
+        }
+        return JSON.stringify({
+          synthesis: "Fees matter [bogle ch01]. Fear is costly [housel ch01].",
+          claims: [
+            { text: "Fees compound.", refs: [{ slug: "bogle", bookNumber: "ch01" }] },
+            { text: "Fear claim.", refs: [{ slug: "housel", bookNumber: "ch01" }] },
+          ],
+        });
+      },
+    };
+    const answer = await askAcrossBooks({
+      skills,
+      question: "随便聊聊 生命的意义 meaning of life",
+      llm,
+    });
+    expect(answer.droppedSlugs).toEqual(["housel"]);
+    expect(answer.report.claims).toHaveLength(2);
+    expect(answer.report.claims[0].referencesResolved).toBe(true);
+    // The refusal's chapters never reached the synthesizer: refs do not resolve.
+    expect(answer.report.claims[1].referencesResolved).toBe(false);
+    expect(answer.report.claims[1].refs).toEqual([]);
+  });
+
+  it("parses a JSON synthesis into citation-resolved claims and keeps the essay", async () => {
     const bogle = skill("bogle", SKILL_MD_A, [
       { bookNumber: "ch01", title: "Costs", toolkit: "costs toolkit" },
     ]);
@@ -234,8 +301,8 @@ describe("grounded report contract (PR-017)", () => {
     expect(answer.synthesis).toBe("Fees matter [bogle ch01]. Stay the course.");
     expect(answer.report.claimsUnparsed).toBe(false);
     expect(answer.report.claims).toHaveLength(2);
-    expect(answer.report.claims[0].verified).toBe(true);
-    expect(answer.report.claims[1].verified).toBe(false);
+    expect(answer.report.claims[0].referencesResolved).toBe(true);
+    expect(answer.report.claims[1].referencesResolved).toBe(false);
   });
 
   it("degrades honestly when the synthesizer ignores the claims contract", async () => {

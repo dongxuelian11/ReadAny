@@ -182,4 +182,44 @@ describe("concept graph V2", () => {
     expect(await store.listRelated(frameworkConceptId("Costs Matter"))).toEqual(relationsBefore);
     expect(summary.topicConcepts).toBe(1);
   });
+
+  it("never steals an alias owned by a different concept; the conflict is warned (iter-3 G)", async () => {
+    const store = createInMemoryConceptIdentityStore();
+    // book-1: "费用 fees" derives the "fees" alias for its concept.
+    await buildConceptGraph(
+      [skillInput("book-1", { topicIndex: [{ term: "费用 fees", chapters: ["ch01"] }] })],
+      store,
+      NOW,
+    );
+    const feesConcept = await store.resolveByAlias("fees");
+    expect(feesConcept).not.toBeNull();
+
+    // book-2 uses a DIFFERENT term that normalizes differently, so it mints
+    // its own concept — and would have stolen the "fees" alias under the old
+    // INSERT OR REPLACE binding.
+    const summary = await buildConceptGraph(
+      [skillInput("book-2", { topicIndex: [{ term: "价格 fees", chapters: ["ch01"] }] })],
+      store,
+      NOW + 1,
+    );
+
+    // The alias still resolves to its FIRST owner, and the conflict is warned.
+    expect(await store.resolveByAlias("fees")).toBe(feesConcept);
+    expect(
+      summary.warnings.some((warning) => warning.includes('"fees"') && warning.includes("rebound")),
+    ).toBe(true);
+  });
+
+  it("single-script terms derive NO word-level aliases (no 'machine learning' → 'learning' merge)", async () => {
+    const store = createInMemoryConceptIdentityStore();
+    await buildConceptGraph(
+      [skillInput("book-1", { topicIndex: [{ term: "machine learning", chapters: ["ch01"] }] })],
+      store,
+      NOW,
+    );
+    expect(await store.resolveByAlias("machine learning")).not.toBeNull();
+    // The word split is gone: no alias exists for the bare word.
+    expect(await store.resolveByAlias("learning")).toBeNull();
+    expect(await store.resolveByAlias("machine")).toBeNull();
+  });
 });

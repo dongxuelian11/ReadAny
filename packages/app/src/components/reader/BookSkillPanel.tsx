@@ -560,9 +560,11 @@ function ConceptGraphSection({ state }: { state: ReturnType<typeof bookSkillPane
 }
 
 /** Shelf-wide ask (PR-017 contract consumer). Claims are listed with a
- * mechanical verification badge: verified = every citation resolved against
- * the installed skills; unverified claims stay visible but flagged. History
- * (PR-020) reopens past asks with their exact verified/unverified badges. */
+ * mechanical citation badge (iter-3 honesty rename): referencesResolved =
+ * every citation resolved against the sources that actually reached the
+ * synthesis. That proves citations are LOCATABLE, not that the claim is
+ * true; unresolved claims stay visible but flagged. History (PR-020) reopens
+ * past asks with their exact badges (legacy rows normalized on read). */
 function AskSection({
   state,
   onAsk,
@@ -637,15 +639,17 @@ function AskSection({
                 {state.askAnswer.report.claims.map((claim, index) => (
                   <li key={`${index}-${claim.text}`} className="py-2">
                     <div className="flex items-start gap-1.5">
-                      {claim.verified ? (
+                      {claim.referencesResolved ? (
                         <CircleCheck
                           className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary"
                           aria-hidden="true"
+                          aria-label={t("bookSkill.ask.refResolved")}
                         />
                       ) : (
                         <CircleAlert
                           className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400"
                           aria-hidden="true"
+                          aria-label={t("bookSkill.ask.refUnresolved")}
                         />
                       )}
                       <span className="min-w-0 text-xs leading-5">{claim.text}</span>

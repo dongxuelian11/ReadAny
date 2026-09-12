@@ -685,9 +685,12 @@ export class SqliteConceptIdentityStore implements ConceptIdentityStore {
 
   async bindAlias(alias: string, conceptId: string): Promise<void> {
     const database = await this.db();
+    // Add-only (iter-3, review item G): an alias already owned by a different
+    // concept is never silently stolen — INSERT (not REPLACE), first wins.
+    // Callers that need conflict semantics check resolveByAlias first.
     await runWithDbRetry(() =>
       database.execute(
-        "INSERT OR REPLACE INTO learner_concept_aliases (alias, concept_id) VALUES (?, ?)",
+        "INSERT OR IGNORE INTO learner_concept_aliases (alias, concept_id) VALUES (?, ?)",
         [alias, conceptId],
       ),
     );
