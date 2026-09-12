@@ -370,7 +370,10 @@ describe("learner panel state", () => {
     state = learnerPanelReducer(state, { type: "TEACHING_DELIVERING" });
     const delivered = {
       ...activeTeaching(),
-      steps: [{ ...activeTeaching().steps[0], content: teachingContent }, activeTeaching().steps[1]],
+      steps: [
+        { ...activeTeaching().steps[0], content: teachingContent },
+        activeTeaching().steps[1],
+      ],
     };
     state = learnerPanelReducer(state, { type: "TEACHING_DELIVERED", session: delivered });
     expect(state.teachingPhase).toBe("active");
@@ -468,5 +471,55 @@ describe("learner panel state", () => {
     // The goal itself is untouched by a teaching failure.
     expect(state.goalPhase).toBe("ready");
     expect(state.goal?.goalId).toBe("g1");
+  });
+
+  describe("review error scoping (F03, WP-B)", () => {
+    function runInProgress() {
+      let state = learnerPanelReducer(initialLearnerPanelState, {
+        type: "REVIEW_START",
+        conceptIds: ["c1"],
+      });
+      state = learnerPanelReducer(state, {
+        type: "REVIEW_DELIVERED",
+        conceptId: "c1",
+        title: "c1",
+        content: {
+          explanation: "explanation",
+          keyPoints: ["a", "b"],
+          workedExample: null,
+          check: { prompt: "p", options: ["a", "b", "c", "d"], correctIndex: 0, explanation: "e" },
+        },
+      });
+      return state;
+    }
+
+    it("a run failure lands in reviewRunPhase and leaves the list phases alone", () => {
+      let state = runInProgress();
+      state = learnerPanelReducer(state, { type: "REVIEW_RUN_FAILED", error: "save failed" });
+      expect(state.reviewRunPhase).toBe("error");
+      expect(state.reviewRunError).toBe("save failed");
+      // The queue must stay visible for retry, not become a list error.
+      expect(state.reviewSession).not.toBeNull();
+      expect(state.reviewPhase).not.toBe("error");
+    });
+
+    it("a list failure lands in reviewPhase and leaves the run state alone", () => {
+      const state = learnerPanelReducer(initialLearnerPanelState, {
+        type: "REVIEW_ERROR",
+        error: "list read failed",
+      });
+      expect(state.reviewPhase).toBe("error");
+      expect(state.error).toBe("list read failed");
+      expect(state.reviewRunPhase).toBe("idle");
+      expect(state.reviewRunError).toBeNull();
+    });
+
+    it("an answering run that fails during save returns to a retryable error, not the list", () => {
+      let state = runInProgress();
+      state = learnerPanelReducer(state, { type: "REVIEW_ANSWERING" });
+      state = learnerPanelReducer(state, { type: "REVIEW_RUN_FAILED", error: "db locked" });
+      expect(state.reviewRunPhase).toBe("error");
+      expect(state.reviewRunError).toBe("db locked");
+    });
   });
 });

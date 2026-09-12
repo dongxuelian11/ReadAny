@@ -348,6 +348,7 @@
       "progress": "第 {{current}} / {{total}} 项",
       "correctAnswer": "正确答案：{{answer}}",
       "retryItem": "重试本题",
+      "retrySave": "重新保存答案",
       "cancel": "结束复习",
       "seeSummary": "完成复习",
       "done": "本轮复习完成",

@@ -12,6 +12,15 @@ import {
 } from "./bkt";
 import type { BKTParams } from "./bkt";
 import {
+  type LearnerAtomicCommit,
+  type LearnerAtomicCommitRequest,
+  type LearnerEvidenceCompletionStore,
+  SessionStaleError,
+  evidencePayloadJson,
+  sameImmutablePayload,
+} from "./commit";
+export { SessionStaleError } from "./commit";
+import {
   createLearnerScheduler,
   newConceptCard,
   retrievabilityOf,
@@ -25,6 +34,7 @@ import type {
   LearnerClock,
   LearnerEvidenceStore,
   LearnerMasteryStore,
+  LearnerReviewLogEntry,
   LearnerReviewStore,
   MasteryStatus,
 } from "./types";
@@ -41,6 +51,15 @@ export interface LearnerEngineDeps extends LearnerEngineOptions {
   evidence: LearnerEvidenceStore;
   mastery: LearnerMasteryStore;
   reviews: LearnerReviewStore;
+  /** Durable per-attempt completion records (WP-A): once present, a replayed
+   * event id never re-enters the update branches — even after unrelated events
+   * were applied in between (the historical A→B→A replay). */
+  completions?: LearnerEvidenceCompletionStore;
+  /** Atomic commit adapter (WP-A): when present, the derived FSRS/BKT writes
+   * plus the completion record land in ONE storage transaction with
+   * compare-and-swap markers. Hosts without one fall back to the stepwise
+   * resumable path below. */
+  atomic?: LearnerAtomicCommit;
 }
 
 export type EvidenceEventInput = Omit<EvidenceEvent, "id" | "timestamp"> & {
@@ -158,9 +177,17 @@ export interface EvidenceApplyResult {
   alreadyApplied: boolean;
 }
 
+/** Options for applyEvidenceEventResult beyond the event itself. */
+export interface EvidenceApplyOptions {
+  /** Teaching-session advance that must commit (or be refused) atomically
+   * with the evidence (WP-A). Only honored on the atomic path. */
+  session?: LearnerAtomicCommitRequest["session"];
+}
+
 async function applyEvidenceEventLocked(
   deps: LearnerEngineDeps,
   input: EvidenceEventInput,
+  options?: EvidenceApplyOptions,
 ): Promise<EvidenceApplyResult> {
   const now = deps.clock.now();
   const event: EvidenceEvent = {
@@ -170,19 +197,151 @@ async function applyEvidenceEventLocked(
     // caller that never stamped one gets the current instant.
     timestamp: input.timestamp ?? now.getTime(),
   };
-  const weight = admissionWeight(event);
-  const reviewInstant = new Date(event.timestamp);
+  const payloadJson = evidencePayloadJson(event);
 
-  // Step: ledger append, idempotent by primary key. A duplicate id for the
-  // SAME concept+result is a resume of a partially applied attempt; a
-  // duplicate id with different content is a caller bug, never a replay.
-  try {
-    await deps.evidence.append(event);
-  } catch (error) {
-    if (!(error instanceof DuplicateEvidenceIdError)) throw error;
-    const stored = await deps.evidence.getById(event.id);
-    if (!stored || stored.conceptId !== event.conceptId || stored.result !== event.result) {
-      throw new EvidenceConflictError(event.id);
+  // Completion-record gate (WP-A, F01): a replayed attempt that was fully
+  // applied is a no-op no matter how many events landed in between — the
+  // historical A→B→A case the per-row lastEventId markers cannot cover. A
+  // replay whose immutable payload differs from the recorded one is a caller
+  // bug, never a silent merge.
+  const completed = await deps.completions?.get(event.id);
+  if (completed) {
+    if (completed.payloadJson !== payloadJson) throw new EvidenceConflictError(event.id);
+    const mastery = await deps.mastery.get(event.conceptId);
+    if (mastery) return { mastery, alreadyApplied: true };
+    // Pathological: completion without a mastery row — fall through to the
+    // idempotent repair below instead of inventing a row.
+  }
+
+  // Duplicate gate: an existing ledger row for this id is either a resume of
+  // the SAME attempt (adopt the stored answer time for every downstream
+  // computation, F02) or a genuine id collision (conflict).
+  const storedEvent = await deps.evidence.getById(event.id);
+  if (storedEvent) {
+    if (!sameImmutablePayload(storedEvent, event)) throw new EvidenceConflictError(event.id);
+    event.timestamp = storedEvent.timestamp;
+  }
+  // Computed only AFTER the (possibly adopted) timestamp is final.
+  const reviewInstant = new Date(event.timestamp);
+  const weight = admissionWeight(event);
+
+  // Atomic path (WP-A): ledger row, review log, card, mastery, the completion
+  // record and — when answering a teaching step — the guarded session advance
+  // land in ONE storage transaction. The adapter owns the evidence INSERT and
+  // the compare-and-swap checks; a stale CAS recomputes against the current
+  // state (bounded), so nothing is ever blindly overwritten.
+  if (deps.atomic) {
+    const MAX_ATOMIC_ATTEMPTS = 3;
+    for (let attempt = 0; attempt < MAX_ATOMIC_ATTEMPTS; attempt += 1) {
+      const scheduler = createLearnerScheduler({ requestRetention: deps.requestRetention });
+      const existingCard = await deps.reviews.getCard(event.conceptId);
+      const cardBefore = existingCard ?? newConceptCard(event.conceptId, reviewInstant);
+      let currentCard = cardBefore;
+      let log: LearnerReviewLogEntry | null = null;
+      if (cardBefore.lastEventId !== event.id) {
+        const reviewed = reviewConceptCard(
+          scheduler,
+          cardBefore,
+          reviewInstant,
+          event.result === "correct",
+        );
+        currentCard = reviewed.card;
+        log = { ...reviewed.log, eventId: event.id };
+      }
+      const prior = await deps.mastery.get(event.conceptId);
+      const alreadyRow = cardBefore.lastEventId === event.id && prior?.lastEventId === event.id;
+      let request: LearnerAtomicCommitRequest;
+      if (!alreadyRow) {
+        const params = deps.bkt ?? DEFAULT_BKT_PARAMS;
+        const priorMastery = prior?.mastery ?? params.pKnow;
+        const admitted = updateMastery(
+          params,
+          priorMastery,
+          event.result === "correct",
+          event.questionType,
+        );
+        // Graded-trust mixture (PR-014): λ is the probability the evidence is
+        // genuine; λ=1 reproduces the ported math exactly.
+        const masteryValue = weight * admitted + (1 - weight) * priorMastery;
+        const evidenceCount = await deps.evidence.countByConcept(event.conceptId);
+        const retention = retrievabilityOf(scheduler, currentCard, reviewInstant);
+        const masteryRow: ConceptMastery = {
+          conceptId: event.conceptId,
+          mastery: masteryValue,
+          confidence: Math.min(1, evidenceCount / CONFIDENCE_SATURATION_OBSERVATIONS),
+          retention,
+          transfer: null,
+          lastVerified: event.timestamp,
+          nextReview: currentCard.due,
+          status: deriveMasteryStatus({
+            evidenceCount,
+            mastery: masteryValue,
+            retention,
+            lastVerified: event.timestamp,
+            requestRetention: deps.requestRetention,
+          }),
+          evidenceCount,
+          updatedAt: event.timestamp,
+          lastEventId: event.id,
+        };
+        request = {
+          event,
+          payloadJson,
+          log,
+          card: { ...currentCard, lastEventId: event.id },
+          mastery: masteryRow,
+          expectedCardLastEventId: cardBefore.lastEventId ?? null,
+          expectedMasteryLastEventId: prior?.lastEventId ?? null,
+          session: options?.session,
+        };
+      } else {
+        // Markers already match: a pure replay of a fully applied event. If a
+        // session advance was requested (answer retry whose session write was
+        // lost), still run the guarded session write through the adapter.
+        if (!options?.session) return { mastery: prior, alreadyApplied: true };
+        request = {
+          event,
+          payloadJson,
+          log: null,
+          card: { ...cardBefore, lastEventId: event.id },
+          mastery: prior as ConceptMastery,
+          expectedCardLastEventId: event.id,
+          expectedMasteryLastEventId: event.id,
+          session: options.session,
+        };
+      }
+      const result = await deps.atomic.commit(request);
+      if (result.outcome === "stale") continue; // recompute against current state
+      if (result.outcome === "conflict") throw new EvidenceConflictError(event.id);
+      if (result.outcome === "sessionStale") {
+        throw new SessionStaleError(options?.session?.expected.id ?? event.id);
+      }
+      if (result.outcome === "applied") {
+        await deps.completions?.record(event.id, payloadJson);
+        return { mastery: result.mastery ?? request.mastery, alreadyApplied: false };
+      }
+      // alreadyApplied (the transaction found the completion record): state
+      // untouched; report the stored mastery.
+      const stored = await deps.mastery.get(event.conceptId);
+      return { mastery: stored ?? request.mastery, alreadyApplied: true };
+    }
+    throw new Error(
+      `Atomic learner commit for ${event.id} stayed stale after ${MAX_ATOMIC_ATTEMPTS} recomputes`,
+    );
+  }
+
+  // Stepwise resumable path (hosts without the atomic adapter): each write
+  // carries its own idempotency marker.
+  // Step: ledger append, idempotent by primary key.
+  if (!storedEvent) {
+    try {
+      await deps.evidence.append(event);
+    } catch (error) {
+      if (!(error instanceof DuplicateEvidenceIdError)) throw error;
+      const stored = await deps.evidence.getById(event.id);
+      if (!stored || !sameImmutablePayload(stored, event)) {
+        throw new EvidenceConflictError(event.id);
+      }
     }
   }
 
@@ -244,11 +403,16 @@ async function applyEvidenceEventLocked(
       lastEventId: event.id,
     };
     await deps.mastery.put(masteryRow);
+    // Completion record (WP-A): written AFTER the state writes on the stepwise
+    // path (best-effort, repaired by the markers on replay) so the historical
+    // A→B→A replay stays a no-op even without the atomic adapter.
+    await deps.completions?.record(event.id, payloadJson);
     return { mastery: masteryRow, alreadyApplied: false };
   }
 
   // The mastery marker matched: everything before it (ledger, log, card) is
   // done — this call was a pure replay of a fully applied event.
+  await deps.completions?.record(event.id, payloadJson);
   return { mastery: prior, alreadyApplied: true };
 }
 
@@ -269,8 +433,9 @@ export function applyEvidenceEvent(
 export function applyEvidenceEventResult(
   deps: LearnerEngineDeps,
   input: EvidenceEventInput,
+  options?: EvidenceApplyOptions,
 ): Promise<EvidenceApplyResult> {
-  return withLearnerWriteLock(() => applyEvidenceEventLocked(deps, input));
+  return withLearnerWriteLock(() => applyEvidenceEventLocked(deps, input, options));
 }
 
 /**

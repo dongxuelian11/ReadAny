@@ -22,6 +22,7 @@ import {
 import type { TeachingLlmClient } from "@readany/core/learner";
 import type { PersonalCurriculum, TeachingSession } from "@readany/core/learner";
 import type { Book } from "@readany/core/types";
+import { createInvokeLearnerAtomicCommit } from "./atomic-commit";
 
 interface CachedExtraction {
   chapters: Map<number, string>;
@@ -70,12 +71,14 @@ export async function createTeachingGenerationDeps(book: Book) {
   };
 }
 
-/** Answer-path deps: deterministic stores only. No book extraction, no model
- * client — grading is local and must stay cheap and offline-safe. */
+/** Answer-path deps: deterministic stores + the atomic commit adapter (WP-A).
+ * No book extraction, no model client — grading is local and must stay cheap
+ * and offline-safe. */
 async function createTeachingAnswerDeps() {
   return {
     clock: { now: (): Date => new Date() },
     ...createSqliteLearnerStores(),
+    atomic: createInvokeLearnerAtomicCommit(),
   };
 }
 

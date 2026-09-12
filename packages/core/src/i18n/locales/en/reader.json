@@ -348,6 +348,7 @@
       "progress": "Item {{current}} of {{total}}",
       "correctAnswer": "Correct answer: {{answer}}",
       "retryItem": "Retry this item",
+      "retrySave": "Resubmit answer",
       "cancel": "End review",
       "seeSummary": "Finish review",
       "done": "Review round complete",

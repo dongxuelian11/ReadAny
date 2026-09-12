@@ -807,18 +807,14 @@ export async function initDatabase(): Promise<void> {
             const backupPath = await getDatabaseFilePath(`${DB_FILENAME}.bak-learner-v2`);
             // Inline the (escaped) path: VACUUM INTO's target must not exist,
             // so a second run failing here is expected and swallowed below.
-            await database.execute(
-              `VACUUM INTO '${backupPath.replace(/'/g, "''")}'`,
-            );
+            await database.execute(`VACUUM INTO '${backupPath.replace(/'/g, "''")}'`);
           }
         }
       } catch {
         // Backup is best-effort (e.g. snapshot already exists): never block init.
       }
       try {
-        await database.execute(
-          "ALTER TABLE learner_concept_mastery ADD COLUMN last_event_id TEXT",
-        );
+        await database.execute("ALTER TABLE learner_concept_mastery ADD COLUMN last_event_id TEXT");
       } catch {
         // Column already exists, ignore
       }
@@ -841,6 +837,17 @@ export async function initDatabase(): Promise<void> {
     CREATE TABLE IF NOT EXISTS learner_evidence_confirmations (
       evidence_id TEXT PRIMARY KEY,
       confirmed_at INTEGER NOT NULL
+    )
+  `);
+      // WP-A completion records (2026-09-13): one row per FULLY applied
+      // evidence event, carrying the immutable payload fingerprint. A replay
+      // of a completed attempt never re-enters the FSRS/BKT update branches —
+      // including the historical A→B→A case the per-row markers cannot cover.
+      await database.execute(`
+    CREATE TABLE IF NOT EXISTS learner_evidence_completions (
+      evidence_id TEXT PRIMARY KEY,
+      payload_json TEXT NOT NULL,
+      applied_at INTEGER NOT NULL
     )
   `);
       await database.execute(`

@@ -22,3 +22,4 @@ export * from "./curriculum-edges";
 export * from "./teaching";
 export * from "./teaching-store";
 export * from "./teaching-engine";
+export * from "./commit";

@@ -6,13 +6,13 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  type ConceptGraphSkillInput,
   buildConceptGraph,
   frameworkConceptId,
-  type ConceptGraphSkillInput,
 } from "../book-skill/concept-graph";
 import type { BookSkillTier1 } from "../book-skill/types";
-import { collectPrerequisiteEdges } from "./curriculum-edges";
 import { createInMemoryConceptIdentityStore } from "./concept-identity";
+import { collectPrerequisiteEdges } from "./curriculum-edges";
 
 const NOW = 1788000000000;
 
@@ -142,12 +142,16 @@ describe("collectPrerequisiteEdges (iter-3 F wiring)", () => {
     const store = createInMemoryConceptIdentityStore();
     // Both chapters share a topic concept — under PR-026 this produced
     // mutual "prerequisite" edges; now it must produce none.
-    const skill = skillInput("book-1", {
-      topicIndex: [{ term: "均值 mean", chapters: ["ch01", "ch02"] }],
-    }, [
-      { book_number: "ch01", chapterIndex: 0 },
-      { book_number: "ch02", chapterIndex: 1 },
-    ]);
+    const skill = skillInput(
+      "book-1",
+      {
+        topicIndex: [{ term: "均值 mean", chapters: ["ch01", "ch02"] }],
+      },
+      [
+        { book_number: "ch01", chapterIndex: 0 },
+        { book_number: "ch02", chapterIndex: 1 },
+      ],
+    );
     await buildConceptGraph([skill], store, NOW);
 
     const edges = await collectPrerequisiteEdges(store, [
@@ -156,9 +160,35 @@ describe("collectPrerequisiteEdges (iter-3 F wiring)", () => {
     ]);
     expect(edges).toEqual([]);
     // Sanity: the shared concept really is registered and participating.
-    expect(await store.resolveByAlias("mean")).toBe(
-      (await store.listConcepts())[0].conceptId,
-    );
+    expect(await store.resolveByAlias("mean")).toBe((await store.listConcepts())[0].conceptId);
     void frameworkConceptId;
+  });
+
+  it("does NOT treat another book's same-numbered chapter as a goal target (F06)", async () => {
+    const store = createInMemoryConceptIdentityStore();
+    // Goal covers book-1 ch0 + ch1. book-1 ch0's concept has an explicit
+    // prerequisite relation whose target concept lives ONLY in book-2 ch1 —
+    // the same chapter NUMBER as a goal chapter. The goal membership check
+    // must use the full source-unit id, so no edge may be produced.
+    await store.registerConcept({ conceptId: "c-base", displayName: "Base", createdAt: NOW });
+    await store.bindSourceUnit("readany:book:book-1:chapter:0", "c-base");
+    await store.bindConceptSourceUnit("c-base", "readany:book:book-1:chapter:0");
+    await store.registerConcept({
+      conceptId: "c-foreign",
+      displayName: "Foreign",
+      createdAt: NOW,
+    });
+    await store.bindSourceUnit("readany:book:book-2:chapter:1", "c-foreign");
+    await store.bindConceptSourceUnit("c-foreign", "readany:book:book-2:chapter:1");
+    await store.bindRelation(
+      { conceptId: "c-base", relatedConceptId: "c-foreign", relation: "prerequisite" },
+      NOW,
+    );
+
+    const edges = await collectPrerequisiteEdges(store, [
+      "readany:book:book-1:chapter:0",
+      "readany:book:book-1:chapter:1",
+    ]);
+    expect(edges).toEqual([]);
   });
 });

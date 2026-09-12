@@ -28,6 +28,7 @@ import type {
   LearningQuizQuestion,
   LearningSourceRef,
 } from "@readany/core/learning";
+import { createInvokeLearnerAtomicCommit } from "./atomic-commit";
 
 const realClock: LearnerClock = {
   now: () => new Date(),
@@ -42,6 +43,9 @@ export async function createLearnerEngineDeps(): Promise<
   return {
     clock: realClock,
     ...createSqliteLearnerStores(),
+    // WP-A: evidence + derived state + completion record land in ONE SQLite
+    // transaction via the Rust learner_commit command.
+    atomic: createInvokeLearnerAtomicCommit(),
   };
 }
 
@@ -77,16 +81,12 @@ export async function recordQuizEvidence(
     Date.now(),
   );
   const { outboxId, event: pinned } = await outbox.enqueue(event, Date.now());
-  try {
-    const result = await applyEvidenceEventResult(deps, pinned);
-    await outbox.markDone(outboxId);
-    return result.mastery;
-  } catch (error) {
-    // Any failure here (including a genuine input conflict) leaves the row
-    // pending: the next drain (launch or a later quiz answer) retries it. The
-    // caller decides how loudly to surface the failure.
-    throw error;
-  }
+  // Any failure here (including a genuine input conflict) leaves the row
+  // pending: the next drain (launch or a later quiz answer) retries it. The
+  // caller decides how loudly to surface the failure.
+  const result = await applyEvidenceEventResult(deps, pinned);
+  await outbox.markDone(outboxId);
+  return result.mastery;
 }
 
 /** Replays evidence rows that were enqueued but never applied (crash, failed
