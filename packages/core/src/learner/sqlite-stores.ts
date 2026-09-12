@@ -10,6 +10,7 @@
 import { getDB } from "../db/db-core";
 import { runWithDbRetry } from "../db/write-retry";
 import type { IDatabase } from "../services/platform";
+import type { LearnerEvidenceCompletionStore } from "./commit";
 import type {
   ConceptIdentityStore,
   ConceptRecord,
@@ -444,6 +445,18 @@ export class SqliteTeachingStore implements TeachingStore {
     const row = rows[0];
     return row ? SqliteTeachingStore.rowToSession(row) : null;
   }
+
+  async getActiveByBook(bookId: string): Promise<TeachingSession | null> {
+    const database = await this.db();
+    const rows = await database.select<Record<string, unknown>>(
+      `SELECT * FROM learner_teaching_sessions
+       WHERE status = 'active' AND book_id = ?
+       ORDER BY started_at DESC`,
+      [bookId],
+    );
+    const row = rows[0];
+    return row ? SqliteTeachingStore.rowToSession(row) : null;
+  }
 }
 
 export class SqliteGoalStore implements GoalStore {
@@ -531,6 +544,7 @@ export interface SqliteLearnerStores {
   teachings: TeachingStore;
   identity: ConceptIdentityStore;
   confirmations: LearnerEvidenceConfirmationStore;
+  completions: LearnerEvidenceCompletionStore;
 }
 
 export function createSqliteLearnerStores(database?: IDatabase): SqliteLearnerStores {
@@ -543,7 +557,39 @@ export function createSqliteLearnerStores(database?: IDatabase): SqliteLearnerSt
     teachings: new SqliteTeachingStore(database),
     identity: new SqliteConceptIdentityStore(database),
     confirmations: new SqliteEvidenceConfirmationStore(database),
+    completions: new SqliteLearnerCompletionStore(database),
   };
+}
+
+/** WP-A completion-record adapter: one row per fully applied evidence event,
+ * carrying the immutable payload fingerprint. Written inside the same
+ * transaction as the state writes by the desktop learner_commit command; this
+ * plain adapter exists for hosts that apply stepwise. */
+export class SqliteLearnerCompletionStore implements LearnerEvidenceCompletionStore {
+  constructor(private readonly database?: IDatabase) {}
+
+  private async db(): Promise<IDatabase> {
+    return this.database ?? (await getDB());
+  }
+
+  async get(eventId: string): Promise<{ payloadJson: string } | null> {
+    const database = await this.db();
+    const rows = await database.select<{ payload_json: string }>(
+      "SELECT payload_json FROM learner_evidence_completions WHERE evidence_id = ?",
+      [eventId],
+    );
+    return rows[0] ? { payloadJson: String(rows[0].payload_json) } : null;
+  }
+
+  async record(eventId: string, payloadJson: string): Promise<void> {
+    const database = await this.db();
+    await runWithDbRetry(() =>
+      database.execute(
+        "INSERT OR IGNORE INTO learner_evidence_completions (evidence_id, payload_json, applied_at) VALUES (?, ?, ?)",
+        [eventId, payloadJson, Date.now()],
+      ),
+    );
+  }
 }
 
 /** Confirmation metadata adapter (iter-1): the learner's vouch for a judged

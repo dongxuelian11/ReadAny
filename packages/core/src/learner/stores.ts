@@ -6,6 +6,7 @@
 // itself lands with the wiring PR.
 
 import type { PlacementSession, PlacementStore } from "./placement";
+import type { LearnerEvidenceCompletionStore } from "./commit";
 import type { TeachingSession } from "./teaching";
 import type { TeachingStore } from "./teaching-store";
 import type {
@@ -34,6 +35,7 @@ export interface InMemoryLearnerStores {
   placements: PlacementStore;
   teachings: TeachingStore;
   confirmations: LearnerEvidenceConfirmationStore;
+  completions: LearnerEvidenceCompletionStore;
   /** Test/inspection surface: current ledger rows in insertion order. */
   events(): EvidenceEvent[];
   logs(): LearnerReviewLogEntry[];
@@ -132,6 +134,23 @@ export function createInMemoryLearnerStores(_clock?: LearnerClock): InMemoryLear
         .sort((a, b) => b.startedAt - a.startedAt)[0];
       return active ? (JSON.parse(JSON.stringify(active)) as TeachingSession) : null;
     },
+    async getActiveByBook(bookId) {
+      const active = [...teachingSessions.values()]
+        .filter((session) => session.status === "active" && session.bookId === bookId)
+        .sort((a, b) => b.startedAt - a.startedAt)[0];
+      return active ? (JSON.parse(JSON.stringify(active)) as TeachingSession) : null;
+    },
+  };
+
+  const completionRows = new Map<string, string>();
+  const completions: LearnerEvidenceCompletionStore = {
+    async get(eventId) {
+      const payloadJson = completionRows.get(eventId);
+      return payloadJson === undefined ? null : { payloadJson };
+    },
+    async record(eventId, payloadJson) {
+      if (!completionRows.has(eventId)) completionRows.set(eventId, payloadJson);
+    },
   };
 
   const confirmationRows = new Map<string, number>();
@@ -151,6 +170,7 @@ export function createInMemoryLearnerStores(_clock?: LearnerClock): InMemoryLear
     placements,
     teachings,
     confirmations,
+    completions,
     events: () => events.map((event) => ({ ...event })),
     logs: () => logs.map((entry) => ({ ...entry })),
   };

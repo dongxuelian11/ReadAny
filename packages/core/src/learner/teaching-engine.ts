@@ -5,7 +5,8 @@
 // exact PR-004/005 path). Fail-closed throughout: unknown/duplicate answers,
 // inactive sessions, and step-generation failures never silently pass.
 
-import { applyEvidenceEvent } from "./engine";
+import { applyEvidenceEventResult, SessionStaleError } from "./engine";
+export { SessionStaleError } from "./engine";
 import type { PersonalCurriculum } from "./goal";
 import type { LearnerConceptState } from "./goal";
 import { getLearnerStateAt } from "./read-model";
@@ -30,6 +31,10 @@ export interface TeachingEngineDeps {
   mastery: import("./types").LearnerMasteryStore;
   reviews: import("./types").LearnerReviewStore;
   teachings: TeachingStore;
+  /** WP-A: forwarded so the answer commit can carry the completion record and
+   * the guarded session advance in one storage transaction. */
+  completions?: import("./commit").LearnerEvidenceCompletionStore;
+  atomic?: import("./commit").LearnerAtomicCommit;
   llm: TeachingLlmClient;
   chapterText: ChapterTextProvider;
 }
@@ -41,8 +46,9 @@ export class TeachingStepFailedError extends Error {
   }
 }
 
-/** Start a teaching session from a curriculum; abandons any previously active
- * session (fail-safe supersession, mirroring placement). The abandon-then-
+/** Start a teaching session from a curriculum; abandons the previously active
+ * session OF THE SAME BOOK only (WP-A, F05): supersession is book-scoped, so
+ * starting book B keeps book A's resumable session intact. The abandon-then-
  * create cycle runs under the learner write lock (PR-012) so two concurrent
  * starts cannot abandon each other and leave two active sessions. */
 export async function startTeachingSession(
@@ -54,9 +60,21 @@ export async function startTeachingSession(
   }
   const now = deps.clock.now();
   return withLearnerWriteLock(async () => {
-    const active = await deps.teachings.getActive();
-    if (active) {
-      await deps.teachings.put({ ...active, status: "abandoned", completedAt: now.getTime() });
+    const active =
+      (await deps.teachings.getActiveByBook?.(curriculum.bookId)) ??
+      (await deps.teachings.getActive());
+    // Only a session of THIS book is superseded; a global active of another
+    // book stays resumable.
+    const superseded =
+      active && active.bookId === curriculum.bookId && active.status === "active"
+        ? active
+        : null;
+    if (superseded) {
+      await deps.teachings.put({
+        ...superseded,
+        status: "abandoned",
+        completedAt: now.getTime(),
+      });
     }
     const steps: TeachingStep[] = curriculum.steps.map((step) => ({
       conceptId: step.conceptId,
@@ -123,14 +141,28 @@ export async function deliverCurrentStep(
       error instanceof Error ? error.message : String(error),
     );
   }
-  const updated: TeachingSession = {
-    ...session,
-    steps: session.steps.map((entry) =>
-      entry.conceptId === step.conceptId ? { ...entry, content } : entry,
-    ),
-  };
-  await deps.teachings.put(updated);
-  return updated;
+
+  // Late-generation guard (WP-A, F05): the model result must never write an
+  // OLD session snapshot over the current state. Re-read the session inside
+  // the write lock and patch ONLY the step content when the session is still
+  // active and the step is still current — a session abandoned, superseded,
+  // completed, or advanced during generation is left exactly as stored, and
+  // the stored (non-revived) view is returned.
+  return withLearnerWriteLock(async () => {
+    const stored = await deps.teachings.get(session.id);
+    if (!stored) return { ...session, steps: session.steps };
+    if (stored.status !== "active") return stored;
+    const target = stored.steps.find((entry) => entry.conceptId === step.conceptId);
+    if (!target || target.content) return stored;
+    const updated: TeachingSession = {
+      ...stored,
+      steps: stored.steps.map((entry) =>
+        entry.conceptId === step.conceptId ? { ...entry, content } : entry,
+      ),
+    };
+    await deps.teachings.put(updated);
+    return updated;
+  });
 }
 
 /** The deps answerCurrentStep actually uses (iter-2): grading is local — no
@@ -138,7 +170,7 @@ export async function deliverCurrentStep(
  * answer path can never drag generation machinery along. */
 export type TeachingAnswerDeps = Pick<
   TeachingEngineDeps,
-  "clock" | "evidence" | "mastery" | "reviews" | "teachings"
+  "clock" | "evidence" | "mastery" | "reviews" | "teachings" | "completions" | "atomic"
 >;
 
 /** Grade the current step's comprehension check deterministically, record the
@@ -167,18 +199,10 @@ export async function answerCurrentStep(
   // The answer time is stamped ON the evidence (iter-1): a retry after a
   // crash replays with the same pinned timestamp, so the FSRS/BKT outcome is
   // byte-identical instead of silently moving to the retry instant.
-  await applyEvidenceEvent(
-    {
-      clock: deps.clock,
-      evidence: deps.evidence,
-      mastery: deps.mastery,
-      reviews: deps.reviews,
-    },
-    {
-      ...teachingEvidence({ sessionId: session.id, step, correct }),
-      timestamp: now.getTime(),
-    },
-  );
+  const event = {
+    ...teachingEvidence({ sessionId: session.id, step, correct }),
+    timestamp: now.getTime(),
+  };
 
   const steps = session.steps.map((entry) =>
     entry.conceptId === step.conceptId ? { ...entry, answered: true, correct } : entry,
@@ -192,8 +216,51 @@ export async function answerCurrentStep(
     status: completed ? "completed" : "active",
     completedAt: completed ? now.getTime() : null,
   };
-  await deps.teachings.put(updated);
-  return updated;
+
+  const engineDeps = {
+    clock: deps.clock,
+    evidence: deps.evidence,
+    mastery: deps.mastery,
+    reviews: deps.reviews,
+    completions: deps.completions,
+    atomic: deps.atomic,
+  };
+
+  if (deps.atomic) {
+    // Atomic path (WP-A): evidence + completion record + the guarded session
+    // advance land in ONE storage transaction. A session that was abandoned,
+    // superseded, or already advanced refuses the whole commit.
+    await applyEvidenceEventResult(engineDeps, event, {
+      session: {
+        expected: {
+          id: session.id,
+          status: session.status,
+          currentIndex: session.currentIndex,
+        },
+        session: updated,
+      },
+    });
+    return updated;
+  }
+
+  await applyEvidenceEventResult(engineDeps, event);
+
+  // Fallback path: guarded session write. Re-read the session and advance only
+  // when it is still the same active session at the same step — a retry after
+  // a lost write resumes; a superseded session is surfaced, never overwritten.
+  return withLearnerWriteLock(async () => {
+    const stored = await deps.teachings.get(session.id);
+    if (!stored) throw new SessionStaleError(session.id);
+    if (
+      stored.status !== "active" ||
+      stored.currentIndex !== session.currentIndex ||
+      stored.steps.find((entry) => entry.conceptId === step.conceptId)?.answered
+    ) {
+      return stored;
+    }
+    await deps.teachings.put(updated);
+    return updated;
+  });
 }
 
 /** Learner-state snapshot for the current step (read-only convenience for the

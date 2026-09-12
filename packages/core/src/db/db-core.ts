@@ -843,6 +843,17 @@ export async function initDatabase(): Promise<void> {
       confirmed_at INTEGER NOT NULL
     )
   `);
+      // WP-A completion records (2026-09-13): one row per FULLY applied
+      // evidence event, carrying the immutable payload fingerprint. A replay
+      // of a completed attempt never re-enters the FSRS/BKT update branches —
+      // including the historical A→B→A case the per-row markers cannot cover.
+      await database.execute(`
+    CREATE TABLE IF NOT EXISTS learner_evidence_completions (
+      evidence_id TEXT PRIMARY KEY,
+      payload_json TEXT NOT NULL,
+      applied_at INTEGER NOT NULL
+    )
+  `);
       await database.execute(`
     CREATE TABLE IF NOT EXISTS learner_placement_sessions (
       id TEXT PRIMARY KEY,

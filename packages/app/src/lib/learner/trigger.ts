@@ -28,6 +28,7 @@ import type {
   LearningQuizQuestion,
   LearningSourceRef,
 } from "@readany/core/learning";
+import { createInvokeLearnerAtomicCommit } from "./atomic-commit";
 
 const realClock: LearnerClock = {
   now: () => new Date(),
@@ -42,6 +43,9 @@ export async function createLearnerEngineDeps(): Promise<
   return {
     clock: realClock,
     ...createSqliteLearnerStores(),
+    // WP-A: evidence + derived state + completion record land in ONE SQLite
+    // transaction via the Rust learner_commit command.
+    atomic: createInvokeLearnerAtomicCommit(),
   };
 }
 

@@ -1,4 +1,5 @@
 mod db;
+mod learner_commit;
 mod readany_cli;
 mod readbox;
 mod storage;
@@ -47,6 +48,7 @@ pub fn run() {
             vector::vector_reinit,
             vector::vector_shutdown,
             readany_cli::readany_cli_run,
+            learner_commit::learner_commit,
             readbox::readbox_start,
             readbox::readbox_status,
             readbox::readbox_stop,
