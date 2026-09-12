@@ -1,21 +1,17 @@
-// WP-A regression scenarios (2026-09-13 review): historical replay, retry time
+﻿// WP-A regression scenarios (2026-09-13 review): historical replay, retry time
 // drift, immutable-payload conflicts, per-book teaching sessions, and late
 // generation writes. Written against the REAL modules (in-memory durable
 // stores + completion records); the SQLite/Rust transaction path is exercised
 // separately by the src-tauri test.
 
 import { describe, expect, it } from "vitest";
-import {
-  EvidenceConflictError,
-  applyEvidenceEventResult,
-} from "./engine";
+import { EvidenceConflictError, applyEvidenceEventResult } from "./engine";
 import type { EvidenceEventInput, LearnerEngineDeps } from "./engine";
+import type { PersonalCurriculum } from "./goal";
+import { createInMemoryLearnerStores } from "./stores";
+import type { TeachingContent, TeachingLlmClient } from "./teaching";
 import { SessionStaleError, deliverCurrentStep, startTeachingSession } from "./teaching-engine";
 import type { TeachingEngineDeps } from "./teaching-engine";
-import { createInMemoryLearnerStores } from "./stores";
-import type { PersonalCurriculum } from "./goal";
-import type { TeachingContent, TeachingLlmClient, TeachingStep } from "./teaching";
-import { teachingEvidence } from "./teaching";
 
 const NOW = new Date("2026-08-30T00:00:00.000Z");
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -57,7 +53,7 @@ function createDeps(at?: Date): {
 }
 
 describe("learner commit scenarios (WP-A)", () => {
-  it("A→B→retry A: a historical replay never re-enters the update branches", async () => {
+  it("A鈫払鈫抮etry A: a historical replay never re-enters the update branches", async () => {
     const { deps, stores } = createDeps();
     const first = await applyEvidenceEventResult(deps, quizInput({ id: "A" }));
     await applyEvidenceEventResult(deps, quizInput({ id: "B", result: "incorrect" }));
@@ -84,7 +80,7 @@ describe("learner commit scenarios (WP-A)", () => {
     await deps.evidence.append({ ...quizInput({ id: "crash" }), timestamp: answerTime });
 
     // The retry arrives with the retry instant on the clock, NOT the original
-    // answer time — the engine must adopt the stored time.
+    // answer time 鈥?the engine must adopt the stored time.
     const retryClock = new Date(NOW.getTime() + 8 * DAY_MS);
     const resumed = await applyEvidenceEventResult(
       { ...deps, clock: fixedClock(retryClock) },
@@ -143,7 +139,7 @@ const fakeContent: TeachingContent = {
   },
 };
 
-function teachingDeps(bookId: string): {
+function teachingDeps(_bookId: string): {
   deps: TeachingEngineDeps;
   stores: ReturnType<typeof createInMemoryLearnerStores>;
   llm: TeachingLlmClient & { calls: number; release?: () => void };
@@ -170,7 +166,6 @@ function teachingDeps(bookId: string): {
       chapterText: async () => "chapter text",
     },
   };
-  void bookId;
 }
 
 describe("teaching session lifecycle (WP-A)", () => {
@@ -230,7 +225,11 @@ describe("teaching session lifecycle (WP-A)", () => {
       reviews: stores.reviews,
       teachings: stores.teachings,
       completions: stores.completions,
-      llm: { async complete() { return JSON.stringify(fakeContent); } },
+      llm: {
+        async complete() {
+          return JSON.stringify(fakeContent);
+        },
+      },
       chapterText: async () => "chapter text",
       // Fake atomic adapter mirroring the Rust contract: applied on first
       // commit, alreadyApplied on replay.
@@ -257,11 +256,8 @@ describe("teaching session lifecycle (WP-A)", () => {
     expect(commits).toHaveLength(1);
     const commit = commits[0] as { session?: { expected: unknown; session: unknown } };
     expect(commit.session).toBeDefined();
-    expect(
-      (commit.session as { session: { currentIndex: number } }).session.currentIndex,
-    ).toBe(1);
+    expect((commit.session as { session: { currentIndex: number } }).session.currentIndex).toBe(1);
     expect(answered.currentIndex).toBe(1);
-    void teachingEvidence;
   });
 
   it("answerCurrentStep surfaces SessionStaleError when the session moved under the answer", async () => {
@@ -273,7 +269,11 @@ describe("teaching session lifecycle (WP-A)", () => {
       reviews: stores.reviews,
       teachings: stores.teachings,
       completions: stores.completions,
-      llm: { async complete() { return JSON.stringify(fakeContent); } },
+      llm: {
+        async complete() {
+          return JSON.stringify(fakeContent);
+        },
+      },
       chapterText: async () => "chapter text",
       atomic: {
         async commit() {

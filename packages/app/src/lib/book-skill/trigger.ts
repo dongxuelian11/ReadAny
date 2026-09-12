@@ -105,7 +105,10 @@ async function bookFileFingerprint(
 ): Promise<{ size: number; mtimeMs: number } | undefined> {
   try {
     const { stat } = await import("@tauri-apps/plugin-fs");
-    const info = await stat(book.filePath);
+    // WP-B (S27): resolve through the shared desktop-library-root resolver —
+    // book.filePath may be a managed relative path that a bare stat misses.
+    const { resolveDesktopDataPath } = await import("@/lib/storage/desktop-library-root");
+    const info = await stat(await resolveDesktopDataPath(book.filePath));
     return { size: info.size, mtimeMs: info.mtime?.getTime() ?? 0 };
   } catch {
     return undefined;

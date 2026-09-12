@@ -320,6 +320,39 @@ describe("grounded report contract (PR-017)", () => {
     expect(answer.report.claims).toEqual([]);
   });
 
+  it("survives legal-JSON null members in claims/refs (F08, WP-B)", async () => {
+    const bogle = skill("bogle", SKILL_MD_A, [
+      { bookNumber: "ch01", title: "Costs", toolkit: "costs toolkit" },
+    ]);
+    const skills = [bogle];
+    const llm = {
+      async complete(system: string) {
+        if (system.includes("ONLY the book")) {
+          return "Fees compound [bogle ch01].";
+        }
+        // Legal JSON containing null members: previously `null.text` threw a
+        // TypeError out of the parser.
+        return JSON.stringify({
+          synthesis: "Fees matter [bogle ch01].",
+          claims: [
+            null,
+            {
+              text: "Fees compound against you.",
+              refs: [null, { slug: "bogle", bookNumber: "ch01" }],
+            },
+            null,
+          ],
+        });
+      },
+    };
+    const answer = await askAcrossBooks({ skills, question: "费用 fees", llm });
+    expect(answer.report.claimsUnparsed).toBe(false);
+    expect(answer.report.claims).toHaveLength(1);
+    expect(answer.report.claims[0].text).toBe("Fees compound against you.");
+    expect(answer.report.claims[0].refs).toEqual([{ slug: "bogle", bookNumber: "ch01" }]);
+    expect(answer.report.claims[0].referencesResolved).toBe(true);
+  });
+
   it("caps the fan-out to top-k and bounds in-flight grounded calls", async () => {
     const many = ["a", "b", "c", "d", "e", "f"].map((letter) => skill(letter, SKILL_MD_A));
     let inFlight = 0;

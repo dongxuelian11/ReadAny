@@ -12,10 +12,10 @@ import {
   startBookPlacement,
 } from "@/lib/learner/placement-trigger";
 import {
+  REVIEW_QUEUE_LIMIT,
   boundReviewQueue,
   deliverReviewItem,
   recordReviewEvidence,
-  REVIEW_QUEUE_LIMIT,
 } from "@/lib/learner/review-trigger";
 import {
   answerTeachingStep,
@@ -79,6 +79,21 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
   const aiConfig = useSettingsStore((state) => state.aiConfig);
   const bookRef = useRef(book);
   bookRef.current = book;
+  // WP-B (F04): one attempt identity per review answer, minted when the
+  // answer is first submitted and reused by save retries. A retry never
+  // mints a second event; changing the selected option is a NEW attempt.
+  const reviewAttemptRef = useRef<{
+    conceptId: string;
+    attemptId: string;
+    selectedOption: number;
+    correct: boolean;
+  } | null>(null);
+  // WP-B: synchronous in-flight guard — a double click on submit must not
+  // produce two evidence events.
+  const reviewSavingRef = useRef(false);
+  // WP-B: request generation for the review RUN — stale async completions
+  // (start/next/cancel racing) may not touch the current view.
+  const reviewRequestGenRef = useRef(0);
 
   // Resume an in-progress placement when the panel opens for this book.
   useEffect(() => {
@@ -277,6 +292,7 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
       return;
     }
     // The review is planned from the freshest due list, not the rendered one.
+    const gen = ++reviewRequestGenRef.current;
     try {
       const rows = await getBookDueReviews(bookRef.current);
       const conceptIds = boundReviewQueue(rows.map((row) => row.conceptId));
@@ -291,6 +307,7 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
         conceptIds[0],
         first?.title ?? conceptIds[0],
       );
+      if (gen !== reviewRequestGenRef.current) return;
       dispatch({
         type: "REVIEW_DELIVERED",
         conceptId: conceptIds[0],
@@ -298,8 +315,9 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
         content,
       });
     } catch (error) {
+      if (gen !== reviewRequestGenRef.current) return;
       dispatch({
-        type: "REVIEW_ERROR",
+        type: "REVIEW_RUN_FAILED",
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -310,6 +328,7 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
     if (!session) return;
     const conceptId = session.conceptIds[session.index];
     if (!conceptId) return;
+    const gen = ++reviewRequestGenRef.current;
     dispatch({ type: "REVIEW_DELIVERING" });
     try {
       const fallbackTitle = state.dueRows.find((row) => row.conceptId === conceptId)?.title;
@@ -318,6 +337,7 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
         conceptId,
         fallbackTitle ?? conceptId,
       );
+      if (gen !== reviewRequestGenRef.current) return;
       dispatch({
         type: "REVIEW_DELIVERED",
         conceptId,
@@ -325,8 +345,9 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
         content,
       });
     } catch (error) {
+      if (gen !== reviewRequestGenRef.current) return;
       dispatch({
-        type: "REVIEW_ERROR",
+        type: "REVIEW_RUN_FAILED",
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -335,30 +356,66 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
   const handleAnswerReviewItem = async (selectedOption: number) => {
     const item = state.reviewItem;
     if (!item) return;
+    // WP-B: a double click during save is swallowed, not a second attempt.
+    if (reviewSavingRef.current) return;
+    reviewSavingRef.current = true;
     const correct = selectedOption === item.content.check.correctIndex;
     dispatch({ type: "REVIEW_ANSWERING" });
     try {
-      // Durable-first evidence (iter-1 semantics): one attemptId per review
-      // answer; the resumable engine makes retries exactly-once.
-      await recordReviewEvidence(item.conceptId, correct, crypto.randomUUID());
+      // Durable-first evidence (iter-1 + WP-B): the attempt identity is minted
+      // once per answer and REUSED by save retries — a failed save resubmits
+      // the same attempt id, concept, option and verdict instead of creating a
+      // second event.
+      let attempt = reviewAttemptRef.current;
+      if (
+        !attempt ||
+        attempt.conceptId !== item.conceptId ||
+        attempt.selectedOption !== selectedOption
+      ) {
+        attempt = {
+          conceptId: item.conceptId,
+          attemptId: crypto.randomUUID(),
+          selectedOption,
+          correct,
+        };
+        reviewAttemptRef.current = attempt;
+      }
+      await recordReviewEvidence(item.conceptId, correct, attempt.attemptId);
+      // The attempt is fully saved: a fresh answer of the next item gets a
+      // fresh identity.
+      reviewAttemptRef.current = null;
       dispatch({
         type: "REVIEW_ANSWERED",
         correct,
         explanation: item.content.check.explanation,
         selectedOption,
       });
-      // The review moved BKT/FSRS 鈥?refresh already-loaded lists.
+      // The review moved BKT/FSRS — refresh already-loaded lists.
       if (state.masteryPhase === "ready") void loadMastery();
       if (state.reviewPhase === "ready") void loadReview();
     } catch (error) {
+      // Keep the attempt ref: the error view's save-retry resubmits THIS
+      // attempt (same id, same payload) — it does not regenerate the item.
       dispatch({
-        type: "REVIEW_ERROR",
+        type: "REVIEW_RUN_FAILED",
         error: error instanceof Error ? error.message : String(error),
       });
+    } finally {
+      reviewSavingRef.current = false;
     }
   };
 
+  /** WP-B: resubmit the pending answer payload after a save failure — no new
+   * attempt id, no regeneration, no re-answer. */
+  const handleRetrySaveReviewAnswer = () => {
+    const attempt = reviewAttemptRef.current;
+    if (!attempt) return;
+    void handleAnswerReviewItem(attempt.selectedOption);
+  };
+
   const handleNextReviewItem = async () => {
+    reviewAttemptRef.current = null;
+    const gen = ++reviewRequestGenRef.current;
     dispatch({ type: "REVIEW_NEXT" });
     const session = state.reviewSession;
     if (!session) return;
@@ -372,6 +429,7 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
         conceptId,
         fallbackTitle ?? conceptId,
       );
+      if (gen !== reviewRequestGenRef.current) return;
       dispatch({
         type: "REVIEW_DELIVERED",
         conceptId,
@@ -379,8 +437,9 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
         content,
       });
     } catch (error) {
+      if (gen !== reviewRequestGenRef.current) return;
       dispatch({
-        type: "REVIEW_ERROR",
+        type: "REVIEW_RUN_FAILED",
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -521,7 +580,12 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
             onDeliverReviewItem={handleDeliverReviewItem}
             onAnswerReviewItem={handleAnswerReviewItem}
             onNextReviewItem={handleNextReviewItem}
-            onCancelReview={() => dispatch({ type: "REVIEW_CANCEL" })}
+            onRetrySaveReviewAnswer={handleRetrySaveReviewAnswer}
+            onCancelReview={() => {
+              reviewAttemptRef.current = null;
+              reviewRequestGenRef.current += 1;
+              dispatch({ type: "REVIEW_CANCEL" });
+            }}
           />
         )}
       </div>
@@ -814,6 +878,7 @@ function ReviewTab({
   onDeliverReviewItem,
   onAnswerReviewItem,
   onNextReviewItem,
+  onRetrySaveReviewAnswer,
   onCancelReview,
 }: {
   state: ReturnType<typeof learnerPanelReducer>;
@@ -824,6 +889,7 @@ function ReviewTab({
   onDeliverReviewItem: () => void;
   onAnswerReviewItem: (selectedOption: number) => void;
   onNextReviewItem: () => void;
+  onRetrySaveReviewAnswer: () => void;
   onCancelReview: () => void;
 }) {
   const { t } = useTranslation();
@@ -861,6 +927,10 @@ function ReviewTab({
                 <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
                 {t("learnerPanel.review.retryItem")}
               </Button>
+              <Button size="sm" variant="outline" onClick={onRetrySaveReviewAnswer}>
+                <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                {t("learnerPanel.review.retrySave")}
+              </Button>
               <Button size="sm" variant="ghost" onClick={onCancelReview}>
                 {t("learnerPanel.review.cancel")}
               </Button>
@@ -885,9 +955,7 @@ function ReviewTab({
                     })}
                   </p>
                 )}
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {answer.explanation}
-                </p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{answer.explanation}</p>
                 <Button className="mt-3" size="sm" variant="outline" onClick={onNextReviewItem}>
                   {current >= session.conceptIds.length
                     ? t("learnerPanel.review.seeSummary")
@@ -959,7 +1027,7 @@ function ReviewTab({
       )}
       {state.reviewPhase === "error" && (
         <div className="mt-3">
-          <p className="text-xs leading-5 text-muted-foreground">{state.reviewRunError}</p>
+          <p className="text-xs leading-5 text-muted-foreground">{state.error}</p>
           <Button className="mt-3" size="sm" variant="outline" onClick={onRetry}>
             <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
             {t("learnerPanel.retry")}
@@ -1478,8 +1546,7 @@ function StepFeedbackCard({
   const answer = state.lastStepAnswer;
   const answeredView = state.lastAnsweredView;
   if (!answer || !answeredView) return null;
-  const correctOption =
-    answeredView.content.check.options[answeredView.content.check.correctIndex];
+  const correctOption = answeredView.content.check.options[answeredView.content.check.correctIndex];
   return (
     <div className="mt-4 rounded-md border border-border/60 p-3">
       {progress && <p className="text-[11px] text-muted-foreground">{progress}</p>}

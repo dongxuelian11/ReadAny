@@ -40,7 +40,10 @@ export async function collectPrerequisiteEdges(
     const parsed = parseChapterSourceUnit(unit);
     if (parsed) indexByUnit.set(unit, parsed.chapterIndex);
   }
-  const inGoal = new Set(indexByUnit.values());
+  // WP-B (F06): membership is checked on the FULL source-unit id, not the bare
+  // chapter number — another book's chapter with the same index must never
+  // produce an edge into this goal.
+  const inGoal = new Set(indexByUnit.keys());
   const edges = new Map<string, PrerequisiteEdge>();
   for (const [unit, before] of indexByUnit) {
     for (const conceptId of await identity.listConceptsForSourceUnit(unit)) {
@@ -49,10 +52,11 @@ export async function collectPrerequisiteEdges(
         for (const targetUnit of await identity.listSourceUnitsForConcept(
           relation.relatedConceptId,
         )) {
+          if (!inGoal.has(targetUnit)) continue;
           const parsed = parseChapterSourceUnit(targetUnit);
           if (!parsed) continue;
           const after = parsed.chapterIndex;
-          if (after === before || !inGoal.has(after)) continue;
+          if (after === before) continue;
           edges.set(`${before}->${after}`, { before, after });
         }
       }

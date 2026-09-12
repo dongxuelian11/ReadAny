@@ -5,12 +5,12 @@
 // transaction with compare-and-swap markers. The Rust side signals guard
 // outcomes through error strings; they are mapped back to typed results here.
 
-import { invoke } from "@tauri-apps/api/core";
 import type {
   LearnerAtomicCommit,
   LearnerAtomicCommitRequest,
   LearnerAtomicCommitResult,
 } from "@readany/core/learner";
+import { invoke } from "@tauri-apps/api/core";
 
 function toRustRequest(request: LearnerAtomicCommitRequest): Record<string, unknown> {
   const { event, session, ...rest } = request;
@@ -65,10 +65,9 @@ export function createInvokeLearnerAtomicCommit(): LearnerAtomicCommit {
   return {
     async commit(request: LearnerAtomicCommitRequest): Promise<LearnerAtomicCommitResult> {
       try {
-        const result = await invoke<{ outcome: string; mastery: unknown }>(
-          "learner_commit",
-          { request: toRustRequest(request) },
-        );
+        const result = await invoke<{ outcome: string; mastery: unknown }>("learner_commit", {
+          request: toRustRequest(request),
+        });
         if (result.outcome === "applied") return { outcome: "applied", mastery: null };
         if (result.outcome === "alreadyApplied") {
           return { outcome: "alreadyApplied", mastery: null };

@@ -807,18 +807,14 @@ export async function initDatabase(): Promise<void> {
             const backupPath = await getDatabaseFilePath(`${DB_FILENAME}.bak-learner-v2`);
             // Inline the (escaped) path: VACUUM INTO's target must not exist,
             // so a second run failing here is expected and swallowed below.
-            await database.execute(
-              `VACUUM INTO '${backupPath.replace(/'/g, "''")}'`,
-            );
+            await database.execute(`VACUUM INTO '${backupPath.replace(/'/g, "''")}'`);
           }
         }
       } catch {
         // Backup is best-effort (e.g. snapshot already exists): never block init.
       }
       try {
-        await database.execute(
-          "ALTER TABLE learner_concept_mastery ADD COLUMN last_event_id TEXT",
-        );
+        await database.execute("ALTER TABLE learner_concept_mastery ADD COLUMN last_event_id TEXT");
       } catch {
         // Column already exists, ignore
       }

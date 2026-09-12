@@ -172,7 +172,12 @@ export type LearnerPanelAction =
   | { type: "REVIEW_NEXT" }
   | { type: "REVIEW_FINISH" }
   | { type: "REVIEW_CANCEL" }
-  | { type: "REVIEW_ERROR"; error: string };
+  /** Failure of the LIST read (loading the due rows). */
+  | { type: "REVIEW_ERROR"; error: string }
+  /** Failure inside a RUNNING review (item generation or answer save).
+   * Kept distinct from REVIEW_ERROR so a run failure can never strand the
+   * queue in a list-error state (F03). */
+  | { type: "REVIEW_RUN_FAILED"; error: string };
 
 export const initialLearnerPanelState: LearnerPanelState = {
   tab: "goal",
@@ -421,7 +426,7 @@ export function learnerPanelReducer(
         reviewAnswer: null,
         reviewRunError: null,
       };
-    case "REVIEW_ERROR":
+    case "REVIEW_RUN_FAILED":
       return { ...state, reviewRunPhase: "error", reviewRunError: action.error };
     default:
       return state;

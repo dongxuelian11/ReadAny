@@ -344,6 +344,7 @@
       "progress": "第 {{current}} / {{total}} 項",
       "correctAnswer": "正確答案：{{answer}}",
       "retryItem": "重試本題",
+      "retrySave": "重新儲存答案",
       "cancel": "結束複習",
       "seeSummary": "完成複習",
       "done": "本輪複習完成",

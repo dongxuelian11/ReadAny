@@ -266,6 +266,9 @@ function parseSynthesisResponse(raw: string): {
   } catch {
     return null;
   }
+  // WP-B (F08): legal JSON may contain null members — a bare `parsed as …`
+  // cast provides no runtime check and `null.synthesis` would throw.
+  if (parsed === null || typeof parsed !== "object") return null;
   const shape = parsed as {
     synthesis?: unknown;
     claims?: unknown;
@@ -273,12 +276,14 @@ function parseSynthesisResponse(raw: string): {
   if (typeof shape.synthesis !== "string" || !Array.isArray(shape.claims)) return null;
   const claims: Array<{ text: string; refs: EvidenceRef[] }> = [];
   for (const entry of shape.claims.slice(0, 12)) {
+    if (entry === null || typeof entry !== "object") continue;
     const claim = entry as { text?: unknown; refs?: unknown };
     if (typeof claim.text !== "string" || !claim.text.trim() || !Array.isArray(claim.refs)) {
       continue;
     }
     const refs: EvidenceRef[] = [];
     for (const ref of claim.refs) {
+      if (ref === null || typeof ref !== "object") continue;
       const shapeRef = ref as { slug?: unknown; bookNumber?: unknown };
       if (typeof shapeRef.slug === "string" && typeof shapeRef.bookNumber === "string") {
         refs.push({ slug: shapeRef.slug, bookNumber: shapeRef.bookNumber });
