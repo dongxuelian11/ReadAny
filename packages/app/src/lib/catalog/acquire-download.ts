@@ -169,6 +169,13 @@ export async function downloadAndVerifyCatalogFile(
   // Stage as temp file in the user data dir.
   const tempRelative = `tmp/catalog-${safeFileStem(edition.catalogEditionId)}.${format}`;
   const tempPath = await resolveDesktopDataPath(tempRelative);
+  const { mkdir } = await import("@tauri-apps/plugin-fs");
+  const tmpDir = await resolveDesktopDataPath("tmp");
+  try {
+    await mkdir(tmpDir, { recursive: true });
+  } catch {
+    /* already exists */
+  }
   try {
     await remove(tempPath);
   } catch {
