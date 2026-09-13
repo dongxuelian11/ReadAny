@@ -31,10 +31,14 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "version:check": "node scripts/bump-version.js --check",
-    "version:set": "node scripts/bump-version.js"
+    "version:set": "node scripts/bump-version.js",
+    "catalog:build": "node scripts/catalog/build-catalog.mjs",
+    "catalog:seed": "node scripts/catalog/build-seed.mjs"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.0"
+    "@biomejs/biome": "^1.9.0",
+    "fflate": "^0.8.2",
+    "opencc-js": "^1.4.2"
   },
   "pnpm": {
     "overrides": {

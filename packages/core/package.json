@@ -31,6 +31,8 @@
     "./epub/draft": "./src/epub/draft.ts",
     "./epub/inspect": "./src/epub/inspect.ts",
     "./epub/*": "./src/epub/*.ts",
+    "./catalog": "./src/catalog/index.ts",
+    "./catalog/*": "./src/catalog/*.ts",
     "./db": "./src/db/index.ts",
     "./db/*": "./src/db/*.ts",
     "./stats": "./src/stats/index.ts",

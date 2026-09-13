@@ -172,6 +172,7 @@
     "vec_queued": "排隊中",
     "manageTags": "管理標籤",
     "remote": "需下載",
-    "downloading": "下載中"
+    "downloading": "下載中",
+    "discoverCatalog": "或到發現書庫找一本想讀的書"
   }
 }

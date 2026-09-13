@@ -34,5 +34,6 @@
     "providerMicrosoft": "微軟翻譯（免費）",
     "providerAI": "AI 翻譯",
     "providerDeepL": "DeepL"
-  }
+  },
+  "chapterPartial": "{{count}} 個段落翻譯未成功，重試只處理失敗部分"
 }

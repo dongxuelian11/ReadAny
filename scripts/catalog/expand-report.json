@@ -1,0 +1,36 @@
+{
+  "startedAt": "2026-09-13T11:22:11.528Z",
+  "doab": {
+    "requests": 78,
+    "upserted": 6485,
+    "byProvider": {
+      "curated": 2,
+      "doab": 6485,
+      "gutenberg": 1994,
+      "otl": 1877
+    }
+  },
+  "verify": {
+    "verified": 342,
+    "failed": [],
+    "bySubject": {
+      "math": 22,
+      "education": 34,
+      "lang-lit": 160,
+      "life-health": 49,
+      "engineering": 47,
+      "philosophy-religion-logic": 71,
+      "physics-astro": 33,
+      "history-society-law": 123,
+      "stats-data": 25,
+      "earth-env-agri": 45,
+      "econ-finance": 33,
+      "psych-cognitive": 29,
+      "cs-se": 16,
+      "ai": 21,
+      "art-design-media": 72,
+      "chem-materials": 23
+    }
+  },
+  "finishedAt": "2026-09-13T12:01:18.488Z"
+}

@@ -34,5 +34,6 @@
     "providerMicrosoft": "Microsoft Translate (Free)",
     "providerAI": "AI Translation",
     "providerDeepL": "DeepL"
-  }
+  },
+  "chapterPartial": "{{count}} paragraph(s) could not be translated — retry keeps the translated parts"
 }
