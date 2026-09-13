@@ -17,7 +17,7 @@ import { setPlatformService } from "@readany/core/services";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { TauriPlatformService } from "./lib/platform/tauri-platform-service";
 import { registerDesktopFallbackContentProvider } from "./lib/rag/fallback-content-provider";
-import { ensureDesktopDataRootPlacement } from "./lib/storage/data-root-bootstrap";
+import { getDataRootReady } from "./lib/storage/data-root-bootstrap";
 import { syncLegacyDesktopLibraryRootConfig } from "./lib/storage/desktop-library-root";
 import { TauriVectorDB } from "./lib/tauri-vector-db";
 import { useLibraryStore } from "./stores/library-store";
@@ -56,8 +56,8 @@ console.log("[VectorDB] TauriVectorDB reference set");
 // Place the library data root on a data drive (D: preferred) before anything
 // reads it — books, covers, the catalog snapshot and the databases all live
 // under this root, and the system-drive AppData must not hold the bulk data.
-const desktopDataRootReady = ensureDesktopDataRootPlacement()
-  .catch((err) => console.warn("[Storage] Data root placement failed:", err))
+// getDataRootReady() is the shared gate: catalog seeding and DB init await it.
+const desktopDataRootReady = getDataRootReady()
   .then(() => syncLegacyDesktopLibraryRootConfig())
   .catch(console.error);
 

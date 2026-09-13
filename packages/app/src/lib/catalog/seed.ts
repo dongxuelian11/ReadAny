@@ -1,3 +1,4 @@
+import { getDataRootReady } from "@/lib/storage/data-root-bootstrap";
 import { resolveDesktopDataPath } from "@/lib/storage/desktop-library-root";
 import { CATALOG_SCHEMA_VERSION } from "@readany/core/catalog";
 import { getPlatformService } from "@readany/core/services";
@@ -75,6 +76,9 @@ export interface CatalogSeedResult {
  * already seeded.
  */
 export async function ensureCatalogSeeded(): Promise<CatalogSeedResult> {
+  // Wait for the data-root placement/migration so the snapshot lands on the
+  // final root (D: drive) instead of racing into the default AppData location.
+  await getDataRootReady();
   const seedBase = await getCatalogSeedBase();
   const manifest: CatalogSeedManifest = JSON.parse(
     await readTextFile(await join(seedBase, "manifest.json")),

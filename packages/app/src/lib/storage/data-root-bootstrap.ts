@@ -56,6 +56,22 @@ async function hasExistingLibraryDataAt(root: string): Promise<boolean> {
   }
 }
 
+let dataRootReadyPromise: Promise<void> | null = null;
+
+/**
+ * Shared gate for anything that resolves paths under the data root (catalog
+ * seeding, database init, …). Without it, a caller that starts before the
+ * placement/migration finishes would read or copy data into the old location.
+ */
+export function getDataRootReady(): Promise<void> {
+  if (!dataRootReadyPromise) {
+    dataRootReadyPromise = ensureDesktopDataRootPlacement().catch((err) => {
+      console.warn("[Storage] Data root placement failed:", err);
+    });
+  }
+  return dataRootReadyPromise;
+}
+
 export async function ensureDesktopDataRootPlacement(): Promise<void> {
   const platform = getPlatformService();
   try {
