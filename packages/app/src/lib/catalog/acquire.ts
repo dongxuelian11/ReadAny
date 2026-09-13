@@ -8,6 +8,7 @@ import {
   failCatalogAcquireTask,
   finishCatalogAcquireTask,
   getAllCatalogAcquireTasks,
+  getCatalogAcquireTask,
   updateCatalogAcquireProgress,
 } from "@readany/core/db/catalog-acquire-queries";
 import type { TFunction } from "i18next";
@@ -153,6 +154,15 @@ export async function acquireOnlineEdition(
   inFlightEditions.add(editionId);
   try {
     await initDatabase();
+    // Already acquired → open the linked book instead of re-downloading.
+    const existingTask = await getCatalogAcquireTask(editionId);
+    if (existingTask?.status === "ready" && existingTask.bookId) {
+      const owned = useLibraryStore.getState().books.find((b) => b.id === existingTask.bookId);
+      if (owned) {
+        const ok = await openDesktopBook({ book: owned, t });
+        return ok ? { status: "opened", bookId: owned.id } : { status: "failed", message: "open" };
+      }
+    }
     const task = await ensureCatalogAcquireTask(
       editionId,
       edition.resource.downloadUrl ?? "",
