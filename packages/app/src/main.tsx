@@ -16,9 +16,10 @@ import { setVectorDB } from "@readany/core/rag";
 import { setPlatformService } from "@readany/core/services";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { TauriPlatformService } from "./lib/platform/tauri-platform-service";
+import { registerDesktopFallbackContentProvider } from "./lib/rag/fallback-content-provider";
+import { ensureDesktopDataRootPlacement } from "./lib/storage/data-root-bootstrap";
 import { syncLegacyDesktopLibraryRootConfig } from "./lib/storage/desktop-library-root";
 import { TauriVectorDB } from "./lib/tauri-vector-db";
-import { registerDesktopFallbackContentProvider } from "./lib/rag/fallback-content-provider";
 import { useLibraryStore } from "./stores/library-store";
 import { flushAllWrites } from "./stores/persist";
 import { useVectorModelStore } from "./stores/vector-model-store";
@@ -26,7 +27,8 @@ import { useVectorModelStore } from "./stores/vector-model-store";
 installFeedbackLogCapture();
 
 const FEEDBACK_WORKER_FALLBACK = "https://feedback.readany.top";
-const feedbackWorkerUrl = import.meta.env.VITE_FEEDBACK_WORKER_URL?.trim() || FEEDBACK_WORKER_FALLBACK;
+const feedbackWorkerUrl =
+  import.meta.env.VITE_FEEDBACK_WORKER_URL?.trim() || FEEDBACK_WORKER_FALLBACK;
 setFeedbackWorkerUrl(feedbackWorkerUrl);
 
 // Register platform service before any database/core operations
@@ -51,7 +53,13 @@ const tauriVectorDB = new TauriVectorDB();
 setVectorDB(tauriVectorDB);
 console.log("[VectorDB] TauriVectorDB reference set");
 
-const desktopDataRootReady = syncLegacyDesktopLibraryRootConfig().catch(console.error);
+// Place the library data root on a data drive (D: preferred) before anything
+// reads it — books, covers, the catalog snapshot and the databases all live
+// under this root, and the system-drive AppData must not hold the bulk data.
+const desktopDataRootReady = ensureDesktopDataRootPlacement()
+  .catch((err) => console.warn("[Storage] Data root placement failed:", err))
+  .then(() => syncLegacyDesktopLibraryRootConfig())
+  .catch(console.error);
 
 // Align vector DB dimension with the currently selected model
 (async () => {
