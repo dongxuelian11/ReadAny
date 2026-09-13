@@ -57,12 +57,19 @@ function assertSafeHttpsUrl(raw: string): URL {
 
 async function verifyEpubContainer(bytes: Uint8Array): Promise<void> {
   try {
-    const fflate = (await import("foliate-js/vendor/fflate.js")) as {
-      unzipSync: (data: Uint8Array) => Record<string, Uint8Array>;
-    };
-    const files = fflate.unzipSync(bytes);
-    if (!files["META-INF/container.xml"]) {
-      throw new AcquireError("Downloaded EPUB is missing its container metadata");
+    // Same zip.js path as library-store metadata extraction (foliate's vendored
+    // fflate is a minimal build without zip support).
+    const { configure, ZipReader, BlobReader } = await import("@zip.js/zip.js");
+    configure({ useWebWorkers: false });
+    const reader = new ZipReader(new BlobReader(new Blob([bytes as unknown as BlobPart])));
+    try {
+      const entries = await reader.getEntries();
+      const hasContainer = entries.some((e) => e.filename === "META-INF/container.xml");
+      if (!hasContainer) {
+        throw new AcquireError("Downloaded EPUB is missing its container metadata");
+      }
+    } finally {
+      await reader.close();
     }
   } catch (err) {
     if (err instanceof AcquireError) throw err;
