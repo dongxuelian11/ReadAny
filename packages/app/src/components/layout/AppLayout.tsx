@@ -16,6 +16,7 @@
  * Reader pages are full-width (no sidebar).
  */
 import { ChatPage as ChatPageComponent } from "@/components/chat/ChatPage";
+import { CatalogPage } from "@/components/catalog/CatalogPage";
 import { CommandPalette } from "@/components/command-palette/CommandPalette";
 import { EpubDraftWorkspace } from "@/components/epub-draft/EpubDraftWorkspace";
 import { HomePage } from "@/components/home/HomePage";
@@ -42,6 +43,7 @@ import { TabBar } from "./TabBar";
 /** All home sub-views — each stays mounted and uses display:none to toggle. */
 const HOME_VIEWS: { id: string; Component: React.ComponentType }[] = [
   { id: "home", Component: HomePage },
+  { id: "catalog", Component: CatalogPage },
   { id: "chat", Component: ChatPageComponent },
   { id: "notes", Component: NotesPage },
   { id: "skills", Component: SkillsPage },

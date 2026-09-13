@@ -2,8 +2,9 @@
  * ImportDropZone — empty state with import button and drag-drop
  */
 import { DesktopImportActions } from "@/components/home/DesktopImportActions";
+import { useAppStore } from "@/stores/app-store";
 import { useLibraryStore } from "@/stores/library-store";
-import { Loader2, Plus } from "lucide-react";
+import { Compass, Loader2, Plus } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -13,6 +14,11 @@ export function ImportDropZone() {
   const [isDragging, setIsDragging] = useState(false);
   const importBooks = useLibraryStore((s) => s.importBooks);
   const isImporting = useLibraryStore((s) => s.isImporting);
+  const openCatalog = useCallback(() => {
+    const { addTab, setActiveTab } = useAppStore.getState();
+    addTab({ id: "catalog", type: "home" as const, title: t("catalog.title") });
+    setActiveTab("catalog");
+  }, [t]);
 
   const handleDrop = useCallback(
     async (e: React.DragEvent) => {
@@ -87,6 +93,14 @@ export function ImportDropZone() {
               </span>
             </button>
           </DesktopImportActions>
+          <button
+            type="button"
+            onClick={openCatalog}
+            className="mt-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <Compass className="size-4" />
+            {t("home.discoverCatalog")}
+          </button>
         </div>
       </div>
     </div>
