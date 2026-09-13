@@ -106,10 +106,21 @@ export async function getTeachingSession(
   return deps.teachings.get(id);
 }
 
+/** The active teaching session — scoped to a book when the caller passes one
+ * (PR32-followup, F05): the durable store keeps one active session per book,
+ * so a resume must read THIS book's row instead of the globally newest one
+ * (with A and B both active, the global read returned B and left book A
+ * without a resume path). Stores without the by-book read fall back to the
+ * global active filtered by bookId. */
 export async function getActiveTeachingSession(
   deps: TeachingEngineDeps,
+  bookId?: string,
 ): Promise<TeachingSession | null> {
-  return deps.teachings.getActive();
+  if (bookId === undefined) return deps.teachings.getActive();
+  const byBook = await deps.teachings.getActiveByBook?.(bookId);
+  if (byBook) return byBook;
+  const global = await deps.teachings.getActive();
+  return global && global.bookId === bookId && global.status === "active" ? global : null;
 }
 
 /** Generate the content for the current step (idempotent: cached content is

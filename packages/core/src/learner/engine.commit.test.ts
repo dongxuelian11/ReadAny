@@ -5,6 +5,8 @@
 // separately by the src-tauri test.
 
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { EvidenceConflictError, applyEvidenceEventResult } from "./engine";
 import type { EvidenceEventInput, LearnerEngineDeps } from "./engine";
 import type { PersonalCurriculum } from "./goal";
@@ -296,3 +298,155 @@ async function answerStep(
   const { answerCurrentStep } = await import("./teaching-engine");
   return answerCurrentStep(deps, session, 0);
 }
+
+/** PR32-followup atomic fixture mirroring the Rust contract: the engine's
+ * derived request is verified (payload-gated), the event inserted BY the
+ * commit, and a completion recorded inside the same boundary. */
+function createAtomicDeps(at?: Date): {
+  deps: LearnerEngineDeps;
+  stores: ReturnType<typeof createInMemoryLearnerStores>;
+  requests: Array<Record<string, unknown>>;
+} {
+  const stores = createInMemoryLearnerStores();
+  const requests: Array<Record<string, unknown>> = [];
+  const deps: LearnerEngineDeps = {
+    clock: fixedClock(at),
+    evidence: stores.evidence,
+    mastery: stores.mastery,
+    reviews: stores.reviews,
+    completions: stores.completions,
+    atomic: {
+      async commit(request: {
+        event: { id: string };
+        payloadJson: string;
+        mastery: unknown;
+      }) {
+        const recorded = await stores.completions.get(request.event.id);
+        if (recorded) {
+          if (recorded.payloadJson !== request.payloadJson) return { outcome: "conflict" as const };
+          return { outcome: "alreadyApplied" as const, mastery: null };
+        }
+        requests.push(request as unknown as Record<string, unknown>);
+        await stores.evidence.append(request.event as never);
+        await stores.completions.record(request.event.id, request.payloadJson);
+        return { outcome: "applied" as const, mastery: null };
+      },
+    },
+  };
+  return { deps, stores, requests };
+}
+
+describe("PR32 follow-up: first-answer counting and source-locator identity", () => {
+  it("F01: the FIRST answer through the atomic path counts itself (evidenceCount 1, confidence > 0)", async () => {
+    const { deps, stores, requests } = createAtomicDeps();
+    const first = await applyEvidenceEventResult(deps, quizInput({ id: "ev-1" }));
+
+    // The engine counts the event set the transaction WILL have — the current
+    // event is inserted by this very commit, so the first answer is 1, not 0.
+    const request = requests[0] as { mastery: { evidenceCount: number; confidence: number } };
+    expect(request.mastery.evidenceCount).toBe(1);
+    expect(request.mastery.confidence).toBeGreaterThan(0);
+    expect(first.mastery.evidenceCount).toBe(1);
+
+    // The second answer counts itself too: 0 → 1 → 2.
+    const second = await applyEvidenceEventResult(deps, quizInput({ id: "ev-2" }));
+    expect((requests[1] as { mastery: { evidenceCount: number } }).mastery.evidenceCount).toBe(2);
+    expect(second.mastery.evidenceCount).toBe(2);
+    expect(stores.events()).toHaveLength(2);
+  });
+
+  it("F01: a replay through the atomic path never bumps the count again", async () => {
+    const { deps, requests } = createAtomicDeps();
+    await applyEvidenceEventResult(deps, quizInput({ id: "ev-1" }));
+    await applyEvidenceEventResult(deps, quizInput({ id: "ev-2" }));
+    const replay = await applyEvidenceEventResult(deps, quizInput({ id: "ev-1" }));
+    expect(replay.alreadyApplied).toBe(true);
+    expect(requests).toHaveLength(2);
+    expect(replay.mastery.evidenceCount).toBe(2);
+  });
+
+  it("F04: a retry that only changes sourceLocator.cfi is a conflict, not the same payload", async () => {
+    const { deps } = createAtomicDeps();
+    await applyEvidenceEventResult(
+      deps,
+      quizInput({ id: "loc-1", sourceLocator: { bookId: "b", chapterIndex: 0, cfi: "epubcfi(/4)" } }),
+    );
+    await expect(
+      applyEvidenceEventResult(
+        deps,
+        quizInput({ id: "loc-1", sourceLocator: { bookId: "b", chapterIndex: 0, cfi: "epubcfi(/6)" } }),
+      ),
+    ).rejects.toBeInstanceOf(EvidenceConflictError);
+  });
+
+  it("F04: a legacy completion fingerprint (locator collapsed to {}) upgrades on replay instead of conflicting", async () => {
+    const { deps, stores } = createAtomicDeps();
+    // Record the event the way the PRE-FIX engine did: nested locator keys
+    // were filtered away, so the stored fingerprint has sourceLocator: {}.
+    await applyEvidenceEventResult(
+      deps,
+      quizInput({ id: "legacy-1", sourceLocator: { bookId: "b", chapterIndex: 0, cfi: "epubcfi(/4)" } }),
+    );
+    const legacy = stores.completions as unknown as {
+      record(eventId: string, payloadJson: string): Promise<void>;
+    };
+    const storedEvent = await deps.evidence.getById("legacy-1");
+    expect(storedEvent).not.toBeNull();
+    await legacy.record("legacy-1", JSON.stringify({
+      conceptId: storedEvent!.conceptId,
+      source: storedEvent!.source,
+      taskType: storedEvent!.taskType,
+      questionType: storedEvent!.questionType ?? null,
+      difficulty: storedEvent!.difficulty ?? null,
+      result: storedEvent!.result,
+      confidence: storedEvent!.confidence,
+      verification: storedEvent!.verification ?? null,
+      sourceLocator: {},
+    }));
+
+    // The replay must verify against the STORED EVENT (which matches) and
+    // upgrade the fingerprint — not raise a spurious conflict.
+    const replay = await applyEvidenceEventResult(
+      deps,
+      quizInput({ id: "legacy-1", sourceLocator: { bookId: "b", chapterIndex: 0, cfi: "epubcfi(/4)" } }),
+    );
+    expect(replay.alreadyApplied).toBe(true);
+    const upgraded = await deps.completions?.get("legacy-1");
+    expect(upgraded?.payloadJson).toContain('"cfi":"epubcfi(/4)"');
+  });
+
+  it("F05: getActiveTeachingSession by book returns THIS book's session even when another book's is newer", async () => {
+    const { deps } = teachingDeps("book-a");
+    const sessionA = await startTeachingSession(deps, curriculumFor("book-a", ["a/ch0"]));
+    await startTeachingSession(deps, curriculumFor("book-b", ["b/ch0"]));
+
+    const { getActiveTeachingSession } = await import("./teaching-engine");
+    const resumedA = await getActiveTeachingSession(deps, "book-a");
+    expect(resumedA?.id).toBe(sessionA.id);
+    expect(resumedA?.status).toBe("active");
+    const noneC = await getActiveTeachingSession(deps, "book-c");
+    expect(noneC).toBeNull();
+  });
+
+  it("the committed real-engine request fixture stays in sync with the engine output", async () => {
+    // Mirrors scripts/capture-engine-request.ts byte for byte: the Rust test
+    // learner_commit::real_engine_first_answer_request_commits_to_sqlite
+    // replays this fixture through the REAL commit against real SQLite. If the
+    // engine's request shape drifts, this test fails and the fixture must be
+    // regenerated with `npx tsx scripts/capture-engine-request.ts`.
+    const { deps, requests } = createAtomicDeps(new Date("2026-08-30T00:00:00.000Z"));
+    await applyEvidenceEventResult(
+      deps,
+      quizInput({
+        id: "fixture-first-answer",
+        sourceLocator: { bookId: "fixture-book", chapterIndex: 0, cfi: "epubcfi(/4/2)" },
+      }),
+    );
+    const fixturePath = resolve(
+      __dirname,
+      "../../../app/src-tauri/tests/fixtures/learner_commit/engine-first-answer-request.json",
+    );
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    expect(requests[0]).toEqual(fixture);
+  });
+});

@@ -88,17 +88,30 @@ const PAYLOAD_FIELDS = [
   "result",
   "confidence",
   "verification",
-  "sourceLocator",
 ] as const;
 
-/** Stable JSON of the event's immutable fields (sorted keys so string
- * comparison is meaningful across replays). */
+/** Stable JSON of the event's immutable fields.
+ *
+ * PR32-followup (F04): the replacer-array form filtered keys at EVERY nesting
+ * level, which collapsed a non-empty `sourceLocator` to `{}` and made all
+ * locator differences invisible to the conflict check. The payload is now
+ * constructed explicitly in a fixed key order (top level AND inside the
+ * locator) and serialized without a replacer, so insertion order IS the
+ * canonical order. `null` normalization is kept for absent optionals. */
 export function evidencePayloadJson(event: EvidenceEvent): string {
   const payload: Record<string, unknown> = {};
   for (const field of PAYLOAD_FIELDS) {
     payload[field] = event[field] ?? null;
   }
-  return JSON.stringify(payload, Object.keys(payload).sort());
+  const locator = event.sourceLocator;
+  payload.sourceLocator = locator
+    ? {
+        bookId: locator.bookId ?? null,
+        chapterIndex: locator.chapterIndex ?? null,
+        cfi: locator.cfi ?? null,
+      }
+    : null;
+  return JSON.stringify(payload);
 }
 
 /** True when a stored event matches the replayed one on every immutable
