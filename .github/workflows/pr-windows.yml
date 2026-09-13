@@ -110,14 +110,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # PR32-followup: the atomic learner commit (learner_commit.rs) owns
-      # cross-language invariants the TypeScript suite cannot see. Run its
-      # real-SQLite tests in THIS blocking job, next to the build that ships it.
-      - name: Rust learner commit tests (real SQLite)
-        run: cargo test learner_commit --manifest-path packages/app/src-tauri/Cargo.toml
-
       - name: Build Windows NSIS installer
         run: pnpm --filter app tauri build --config src-tauri/tauri.ci.conf.json --ci
+
+      # PR32-followup: the atomic learner commit (learner_commit.rs) owns
+      # cross-language invariants the TypeScript suite cannot see. Runs AFTER
+      # the build: the tauri build script requires the bundled CLI dist
+      # directory to exist, which the build step above produces.
+      - name: Rust learner commit tests (real SQLite)
+        run: cargo test learner_commit --manifest-path packages/app/src-tauri/Cargo.toml
 
   blocking-readbox-integration:
     name: Blocking gate - pinned Read-Box real integration
