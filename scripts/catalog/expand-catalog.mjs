@@ -47,7 +47,7 @@ const CURATED = JSON.parse(readFileSync(path.join(__dirname, "curated-books.json
 
 const args = new Set(process.argv.slice(2));
 const DOAB_DELAY_MS = 350;
-const DOAB_PAGES_PER_KEYWORD = 8; // ×100 records
+const DOAB_PAGES_PER_KEYWORD = 3; // ×100 records (DOAB responses are slow ~30s/page)
 const VERIFY_TARGET_PER_SUBJECT = 22;
 const VERIFY_TOTAL_MIN = 300;
 const VERIFY_CONCURRENCY = 4;
@@ -394,6 +394,19 @@ async function main() {
   const db = new DatabaseSync(dbPath);
   const report = { startedAt: new Date().toISOString(), doab: null, verify: null };
 
+  // Verify first: the acceptance-critical part writes per-book as it goes, so
+  // a later interruption still leaves verified data in the snapshot.
+  if (!doabOnly) {
+    console.log("[verify] downloading + verifying online editions…");
+    report.verify = await verifyOnlineEntries(db);
+    console.log(
+      `[verify] verified=${report.verify.verified} failed=${report.verify.failed.length}`,
+    );
+    for (const f of report.verify.failed.slice(0, 15)) {
+      console.log(`  FAIL ${f.id}: ${f.error} — ${f.title}`);
+    }
+  }
+
   if (!verifyOnly) {
     console.log("[doab] fetching DOAB directory records…");
     const { byId, requests } = await fetchDoab();
@@ -416,17 +429,6 @@ async function main() {
     console.log("[doab] done:", report.doab);
   }
 
-  if (!doabOnly) {
-    console.log("[verify] downloading + verifying online editions…");
-    report.verify = await verifyOnlineEntries(db);
-    console.log(
-      `[verify] verified=${report.verify.verified} failed=${report.verify.failed.length}`,
-    );
-    for (const f of report.verify.failed.slice(0, 15)) {
-      console.log(`  FAIL ${f.id}: ${f.error} — ${f.title}`);
-    }
-  }
-
   const meta = db.prepare("SELECT value FROM meta WHERE key='sources'").get();
   if (meta) {
     const sources = JSON.parse(meta.value);
@@ -436,10 +438,34 @@ async function main() {
       : sources.onlineVerified;
     db.prepare("UPDATE meta SET value=? WHERE key='sources'").run(JSON.stringify(sources));
   }
+  // Bump built_at so installed apps re-copy the expanded snapshot (the seeding
+  // marker compares manifest.builtAt). Also refresh manifest counts + hashes.
+  const builtAt = new Date().toISOString();
+  db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('built_at', ?)").run(builtAt);
+  const counts = {
+    totalEditions: db.prepare("SELECT COUNT(*) AS n FROM editions").get().n,
+    bundled: db.prepare("SELECT COUNT(*) AS n FROM editions WHERE availability='bundled'").get()
+      .n,
+    online: db.prepare("SELECT COUNT(*) AS n FROM editions WHERE availability='online'").get().n,
+    metadataOnly: db
+      .prepare("SELECT COUNT(*) AS n FROM editions WHERE availability='metadata-only'")
+      .get().n,
+  };
+  const manifestPath = path.join(SEED_DIR, "manifest.json");
+  try {
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    manifest.builtAt = builtAt;
+    manifest.counts = counts;
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  } catch (err) {
+    console.warn("[expand] manifest refresh failed:", err);
+  }
   db.close();
   report.finishedAt = new Date().toISOString();
+  report.builtAt = builtAt;
+  report.counts = counts;
   writeFileSync(path.join(__dirname, "expand-report.json"), `${JSON.stringify(report, null, 2)}\n`);
-  console.log("=== expand done ===");
+  console.log("=== expand done ===", JSON.stringify(counts));
 }
 
 main().catch((err) => {

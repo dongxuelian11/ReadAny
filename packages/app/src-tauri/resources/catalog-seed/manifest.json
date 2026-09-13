@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "builtAt": "2026-09-13T07:30:38.498Z",
+  "builtAt": "2026-09-13T12:04:15.528Z",
   "seededAt": "2026-09-13T08:52:50.211Z",
   "counts": {
-    "totalEditions": 3873,
+    "totalEditions": 10358,
     "bundled": 14,
-    "online": 3857,
+    "online": 10342,
     "metadataOnly": 2
   },
   "books": [
