@@ -1,6 +1,7 @@
 import type { IDatabase } from "../services/platform";
 import { getPlatformService } from "../services/platform";
 import { generateId } from "../utils/generate-id";
+import { migrateLearnerReviewLogsIdentity } from "./learner-log-migration";
 import { runSerializedDbTask } from "./write-retry";
 
 // Lazy-loaded database instances
@@ -786,8 +787,7 @@ export async function initDatabase(): Promise<void> {
       scheduled_days INTEGER NOT NULL,
       learning_steps INTEGER NOT NULL,
       review INTEGER NOT NULL,
-      event_id TEXT,
-      UNIQUE(concept_id, review)
+      event_id TEXT
     )
   `);
       await database.execute(
@@ -831,6 +831,28 @@ export async function initDatabase(): Promise<void> {
       await database.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_learner_review_logs_event ON learner_review_logs(event_id) WHERE event_id IS NOT NULL",
       );
+      // PR32-followup (F03): rebuild legacy installs' review-log table without
+      // UNIQUE(concept_id, review). Two legitimate attempts at the same
+      // concept in the same millisecond are not duplicates; the old constraint
+      // made the atomic commit's log insert fail (or, after the OR IGNORE
+      // change, silently drop the second log). One-time consistent snapshot
+      // before the rebuild on existing data.
+      try {
+        const legacyConstraint = await database.select<{ n: number }>(
+          "SELECT COUNT(*) AS n FROM pragma_index_list('learner_review_logs') WHERE origin = 'u'",
+        );
+        if ((legacyConstraint[0]?.n ?? 0) > 0) {
+          const platform = getPlatformService();
+          const backupPath = platform.isDesktop
+            ? await getDatabaseFilePath(`${DB_FILENAME}.bak-learner-v3`)
+            : null;
+          await migrateLearnerReviewLogsIdentity(database, { backupFilePath: backupPath });
+        }
+      } catch {
+        // The migration is load-bearing but must not hard-block startup on an
+        // unexpected pragma/adapter failure; the atomic commit fails LOUDLY on
+        // an un-migrated table instead of silently dropping logs.
+      }
       // Evidence confirmation metadata (iter-1): the learner's vouch for a
       // judged verdict is recorded WITHOUT a second BKT/FSRS apply.
       await database.execute(`

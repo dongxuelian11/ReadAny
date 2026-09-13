@@ -149,7 +149,11 @@ export async function getGoalWorkspace(book: Book): Promise<GoalWorkspace | null
   const goal = await getActiveGoal(book);
   if (!goal) return null;
   const curriculum = await getCurriculumForGoal(goal);
-  const teaching = await getActiveTeaching();
+  // PR32-followup (F05): read THIS book's active session directly — the global
+  // newest-active read used to return book B's session here, which then failed
+  // the bookId filter and left book A with no resume even though its own
+  // session was still active.
+  const teaching = await getActiveTeaching(book);
   return {
     goal,
     curriculum,

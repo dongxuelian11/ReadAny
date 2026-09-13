@@ -98,6 +98,13 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
   // Resume an in-progress placement when the panel opens for this book.
   useEffect(() => {
     dispatch({ type: "BOOK_CHANGED", bookId: book.id });
+    // PR32-followup (F06): switching books invalidates the review run's
+    // in-flight requests and any unsaved answer ref. An answer already durably
+    // enqueued under the old book still completes on its own (its callback is
+    // generation-guarded below); it never moves to the new book.
+    reviewAttemptRef.current = null;
+    reviewSavingRef.current = false;
+    reviewRequestGenRef.current += 1;
     let cancelled = false;
     void (async () => {
       try {
@@ -293,6 +300,10 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
     }
     // The review is planned from the freshest due list, not the rendered one.
     const gen = ++reviewRequestGenRef.current;
+    // A fresh run starts from a clean slate: a stale unsaved attempt from a
+    // previous run must never leak into a new item (PR32-followup, F06).
+    reviewAttemptRef.current = null;
+    setSelectedOption(null);
     try {
       const rows = await getBookDueReviews(bookRef.current);
       const conceptIds = boundReviewQueue(rows.map((row) => row.conceptId));
@@ -329,6 +340,11 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
     const conceptId = session.conceptIds[session.index];
     if (!conceptId) return;
     const gen = ++reviewRequestGenRef.current;
+    // PR32-followup (F06): regeneration is only reachable when no unsaved
+    // answer is pending (the error view gates the buttons); still clear any
+    // stale attempt so the new item can never inherit its identity.
+    reviewAttemptRef.current = null;
+    setSelectedOption(null);
     dispatch({ type: "REVIEW_DELIVERING" });
     try {
       const fallbackTitle = state.dueRows.find((row) => row.conceptId === conceptId)?.title;
@@ -360,17 +376,24 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
     if (reviewSavingRef.current) return;
     reviewSavingRef.current = true;
     const correct = selectedOption === item.content.check.correctIndex;
+    // PR32-followup (F06): the save is tied to the request generation it was
+    // minted under — after a book switch/cancel its callbacks must not touch
+    // the panel. The evidence itself is enqueued durably and completes on its
+    // own regardless.
+    const gen = reviewRequestGenRef.current;
     dispatch({ type: "REVIEW_ANSWERING" });
     try {
       // Durable-first evidence (iter-1 + WP-B): the attempt identity is minted
       // once per answer and REUSED by save retries — a failed save resubmits
       // the same attempt id, concept, option and verdict instead of creating a
-      // second event.
+      // second event. A regenerated item with a different answer key also
+      // mints fresh (a stale attempt never adopts the new correctIndex).
       let attempt = reviewAttemptRef.current;
       if (
         !attempt ||
         attempt.conceptId !== item.conceptId ||
-        attempt.selectedOption !== selectedOption
+        attempt.selectedOption !== selectedOption ||
+        attempt.correct !== correct
       ) {
         attempt = {
           conceptId: item.conceptId,
@@ -380,13 +403,14 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
         };
         reviewAttemptRef.current = attempt;
       }
-      await recordReviewEvidence(item.conceptId, correct, attempt.attemptId);
+      await recordReviewEvidence(item.conceptId, attempt.correct, attempt.attemptId);
+      if (gen !== reviewRequestGenRef.current) return;
       // The attempt is fully saved: a fresh answer of the next item gets a
       // fresh identity.
       reviewAttemptRef.current = null;
       dispatch({
         type: "REVIEW_ANSWERED",
-        correct,
+        correct: attempt.correct,
         explanation: item.content.check.explanation,
         selectedOption,
       });
@@ -394,6 +418,7 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
       if (state.masteryPhase === "ready") void loadMastery();
       if (state.reviewPhase === "ready") void loadReview();
     } catch (error) {
+      if (gen !== reviewRequestGenRef.current) return;
       // Keep the attempt ref: the error view's save-retry resubmits THIS
       // attempt (same id, same payload) — it does not regenerate the item.
       dispatch({
@@ -417,6 +442,7 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
     reviewAttemptRef.current = null;
     const gen = ++reviewRequestGenRef.current;
     dispatch({ type: "REVIEW_NEXT" });
+    setSelectedOption(null);
     const session = state.reviewSession;
     if (!session) return;
     const nextIndex = session.index + 1;
@@ -581,9 +607,14 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
             onAnswerReviewItem={handleAnswerReviewItem}
             onNextReviewItem={handleNextReviewItem}
             onRetrySaveReviewAnswer={handleRetrySaveReviewAnswer}
+            // PR32-followup (F06): the error view routes by failure source —
+            // an unsaved answer offers ONLY its save retry; without one, only
+            // regeneration. The two retries must never be offered together.
+            hasPendingReviewSave={reviewAttemptRef.current !== null}
             onCancelReview={() => {
               reviewAttemptRef.current = null;
               reviewRequestGenRef.current += 1;
+              setSelectedOption(null);
               dispatch({ type: "REVIEW_CANCEL" });
             }}
           />
@@ -879,6 +910,7 @@ function ReviewTab({
   onAnswerReviewItem,
   onNextReviewItem,
   onRetrySaveReviewAnswer,
+  hasPendingReviewSave,
   onCancelReview,
 }: {
   state: ReturnType<typeof learnerPanelReducer>;
@@ -890,6 +922,7 @@ function ReviewTab({
   onAnswerReviewItem: (selectedOption: number) => void;
   onNextReviewItem: () => void;
   onRetrySaveReviewAnswer: () => void;
+  hasPendingReviewSave: boolean;
   onCancelReview: () => void;
 }) {
   const { t } = useTranslation();
@@ -923,14 +956,23 @@ function ReviewTab({
           <div className="mt-4">
             <p className="text-xs leading-5 text-muted-foreground">{state.reviewRunError}</p>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={onDeliverReviewItem}>
-                <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                {t("learnerPanel.review.retryItem")}
-              </Button>
-              <Button size="sm" variant="outline" onClick={onRetrySaveReviewAnswer}>
-                <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                {t("learnerPanel.review.retrySave")}
-              </Button>
+              {/* PR32-followup (F06): route the retry by failure source. A
+                  pending unsaved answer is only ever retried AS-IS; generating
+                  a new item while an answer is unsaved would re-key its
+                  verdict. Without a pending answer, only regeneration makes
+                  sense (a bare save-retry would have nothing to resubmit). */}
+              {!hasPendingReviewSave && (
+                <Button size="sm" variant="outline" onClick={onDeliverReviewItem}>
+                  <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                  {t("learnerPanel.review.retryItem")}
+                </Button>
+              )}
+              {hasPendingReviewSave && (
+                <Button size="sm" variant="outline" onClick={onRetrySaveReviewAnswer}>
+                  <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                  {t("learnerPanel.review.retrySave")}
+                </Button>
+              )}
               <Button size="sm" variant="ghost" onClick={onCancelReview}>
                 {t("learnerPanel.review.cancel")}
               </Button>

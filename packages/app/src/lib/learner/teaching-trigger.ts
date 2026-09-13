@@ -110,8 +110,10 @@ export async function answerTeachingStep(
   return coreAnswerCurrentStep(await createTeachingAnswerDeps(), session, selectedOption);
 }
 
-/** The active teaching session for any book, if one is in progress. */
-export async function getActiveTeaching(): Promise<TeachingSession | null> {
+/** The active teaching session — for a specific book when given (PR32-followup,
+ * F05): reads the per-book active row so book A stays resumable while book B's
+ * newer session is also active. */
+export async function getActiveTeaching(book?: Book): Promise<TeachingSession | null> {
   const stores = createSqliteLearnerStores();
   const deps = {
     clock: { now: (): Date => new Date() },
@@ -119,5 +121,6 @@ export async function getActiveTeaching(): Promise<TeachingSession | null> {
   };
   return coreGetActiveTeachingSession(
     deps as unknown as Parameters<typeof coreGetActiveTeachingSession>[0],
+    book?.id,
   );
 }

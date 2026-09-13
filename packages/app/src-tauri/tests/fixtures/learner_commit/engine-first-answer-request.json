@@ -1,0 +1,58 @@
+{
+  "event": {
+    "id": "fixture-first-answer",
+    "conceptId": "stats/mean",
+    "source": "READ_BOX_QUIZ",
+    "taskType": "quiz",
+    "questionType": "mc",
+    "result": "correct",
+    "confidence": 1,
+    "verification": "deterministic_keyed",
+    "timestamp": 1788048000000,
+    "sourceLocator": {
+      "bookId": "fixture-book",
+      "chapterIndex": 0,
+      "cfi": "epubcfi(/4/2)"
+    }
+  },
+  "payloadJson": "{\"conceptId\":\"stats/mean\",\"source\":\"READ_BOX_QUIZ\",\"taskType\":\"quiz\",\"questionType\":\"mc\",\"difficulty\":null,\"result\":\"correct\",\"confidence\":1,\"verification\":\"deterministic_keyed\",\"sourceLocator\":{\"bookId\":\"fixture-book\",\"chapterIndex\":0,\"cfi\":\"epubcfi(/4/2)\"}}",
+  "log": {
+    "conceptId": "stats/mean",
+    "rating": 3,
+    "state": 0,
+    "due": 1788048000000,
+    "stability": 0,
+    "difficulty": 0,
+    "scheduledDays": 0,
+    "learningSteps": 0,
+    "review": 1788048000000,
+    "eventId": "fixture-first-answer"
+  },
+  "card": {
+    "conceptId": "stats/mean",
+    "due": 1788307200000,
+    "stability": 2.3065,
+    "difficulty": 2.11810397,
+    "learningSteps": 0,
+    "reps": 1,
+    "lapses": 0,
+    "state": 2,
+    "lastReview": 1788048000000,
+    "lastEventId": "fixture-first-answer"
+  },
+  "mastery": {
+    "conceptId": "stats/mean",
+    "mastery": 0.5076404494382023,
+    "confidence": 0.06666666666666667,
+    "retention": 1,
+    "transfer": null,
+    "lastVerified": 1788048000000,
+    "nextReview": 1788307200000,
+    "status": "learning",
+    "evidenceCount": 1,
+    "updatedAt": 1788048000000,
+    "lastEventId": "fixture-first-answer"
+  },
+  "expectedCardLastEventId": null,
+  "expectedMasteryLastEventId": null
+}

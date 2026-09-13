@@ -206,11 +206,28 @@ async function applyEvidenceEventLocked(
   // bug, never a silent merge.
   const completed = await deps.completions?.get(event.id);
   if (completed) {
-    if (completed.payloadJson !== payloadJson) throw new EvidenceConflictError(event.id);
-    const mastery = await deps.mastery.get(event.conceptId);
-    if (mastery) return { mastery, alreadyApplied: true };
-    // Pathological: completion without a mastery row — fall through to the
-    // idempotent repair below instead of inventing a row.
+    if (completed.payloadJson !== payloadJson) {
+      // PR32-followup (F04): completions recorded by the pre-fix engine carry a
+      // fingerprint whose nested sourceLocator collapsed to `{}`
+      // (JSON.stringify replacer arrays filter at every depth). A replay of the
+      // SAME attempt must verify against the durable event row and UPGRADE the
+      // fingerprint instead of raising a spurious conflict; a genuinely
+      // different payload still conflicts.
+      const stored = await deps.evidence.getById(event.id);
+      if (!stored || !sameImmutablePayload(stored, event)) {
+        throw new EvidenceConflictError(event.id);
+      }
+      await deps.completions?.record(event.id, payloadJson);
+      const mastery = await deps.mastery.get(event.conceptId);
+      if (mastery) return { mastery, alreadyApplied: true };
+      // Pathological: completion without a mastery row — fall through to the
+      // idempotent repair below instead of inventing a row.
+    } else {
+      const mastery = await deps.mastery.get(event.conceptId);
+      if (mastery) return { mastery, alreadyApplied: true };
+      // Pathological: completion without a mastery row — fall through to the
+      // idempotent repair below instead of inventing a row.
+    }
   }
 
   // Duplicate gate: an existing ledger row for this id is either a resume of
@@ -263,7 +280,16 @@ async function applyEvidenceEventLocked(
         // Graded-trust mixture (PR-014): λ is the probability the evidence is
         // genuine; λ=1 reproduces the ported math exactly.
         const masteryValue = weight * admitted + (1 - weight) * priorMastery;
-        const evidenceCount = await deps.evidence.countByConcept(event.conceptId);
+        // PR32-followup (F01): the count must describe the event set AFTER this
+        // transaction — and the current event is inserted BY this very commit.
+        // The pre-fix code counted the ledger BEFORE the insert, so every
+        // atomic-path answer stored the previous answer's count (first answer →
+        // evidenceCount 0, confidence 0, classifyGap "missing"). A stored row
+        // for this id (resume/replay) is already part of the count.
+        const storedBeforeCommit = storedEvent ?? (await deps.evidence.getById(event.id));
+        const evidenceCount =
+          (await deps.evidence.countByConcept(event.conceptId)) +
+          (storedBeforeCommit ? 0 : 1);
         const retention = retrievabilityOf(scheduler, currentCard, reviewInstant);
         const masteryRow: ConceptMastery = {
           conceptId: event.conceptId,
