@@ -111,6 +111,18 @@ function cleanGutenbergTitle(title) {
     .trim();
 }
 
+/**
+ * Small zh↔en term mapping for subject search (plan §10: e.g. 概率/機率/
+ * probability). Matched subjects contribute their display names AND keyword
+ * terms into the indexed text so Chinese queries find English-subject books.
+ */
+function subjectSearchTerms(subjectIds) {
+  return (subjectIds || []).map((id) => {
+    const s = SUBJECTS.find((x) => x.id === id);
+    return s ? `${s.zh} ${s.en} ${s.keywords.join(" ")}` : "";
+  });
+}
+
 function workKeyOf(title, firstAuthor) {
   const t = normalizeCatalogText(title || "").slice(0, 80);
   const a =
@@ -227,12 +239,7 @@ function gutendexToRow(book, { topicSubject = null, curated = null } = {}) {
     row.original_title,
     authors.join(" "),
     row.publisher,
-    ...(row.subject_ids
-      ? JSON.parse(row.subject_ids).map((id) => {
-          const s = SUBJECTS.find((x) => x.id === id);
-          return s ? `${s.zh} ${s.en}` : "";
-        })
-      : []),
+    ...subjectSearchTerms(row.subject_ids ? JSON.parse(row.subject_ids) : []),
     languages.join(" "),
   ]);
   return row;
@@ -290,10 +297,7 @@ function otlToRow(t) {
     authors.join(" "),
     row.publisher,
     subjectNames,
-    ...subjectIds.map((id) => {
-      const s = SUBJECTS.find((x) => x.id === id);
-      return s ? `${s.zh} ${s.en}` : "";
-    }),
+    ...subjectSearchTerms(subjectIds),
     row.language,
   ]);
   return row;
@@ -399,10 +403,7 @@ function curatedReleaseRow(entry) {
     row.original_title,
     entry.authors.join(" "),
     row.publisher,
-    ...entry.subjects.map((id) => {
-      const s = SUBJECTS.find((x) => x.id === id);
-      return s ? `${s.zh} ${s.en}` : "";
-    }),
+    ...subjectSearchTerms(entry.subjects),
     row.language,
   ]);
   return row;

@@ -29,10 +29,41 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..", "..");
 const SEED_DIR = path.join(ROOT, "packages", "app", "src-tauri", "resources", "catalog-seed");
 const BOOKS_DIR = path.join(SEED_DIR, "books");
+const SUBJECTS = JSON.parse(
+  readFileSync(path.join(ROOT, "packages", "core", "src", "catalog", "subjects.json"), "utf8"),
+);
 
 const MIN_EPUB_BYTES = 30_000;
 const MIN_PDF_BYTES = 500_000;
 const MIN_TEXT_SAMPLE_CHARS = 200;
+
+function subjectSearchTerms(subjectIds) {
+  return (subjectIds || []).map((id) => {
+    const s = SUBJECTS.find((x) => x.id === id);
+    return s ? `${s.zh} ${s.en} ${s.keywords.join(" ")}` : "";
+  });
+}
+
+function parseJsonArray(raw) {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+function bundleSearchText(row, toc) {
+  return buildCatalogIndexText([
+    row.title_zh,
+    row.original_title,
+    parseJsonArray(row.authors).join(" "),
+    ...subjectSearchTerms(parseJsonArray(row.subject_ids)),
+    ...toc.slice(0, 25),
+    row.language,
+  ]);
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -211,7 +242,7 @@ async function main() {
 
   const bundled = db
     .prepare(
-      "SELECT catalog_edition_id, original_title, title_zh, resource_download_url, bundled_file FROM editions WHERE availability='bundled' ORDER BY catalog_edition_id",
+      "SELECT catalog_edition_id, original_title, title_zh, authors, subject_ids, language, resource_download_url, bundled_file FROM editions WHERE availability='bundled' ORDER BY catalog_edition_id",
     )
     .all();
   if (bundled.length < 12) {
@@ -252,7 +283,7 @@ async function main() {
       verified.sizeBytes,
       new Date().toISOString().slice(0, 10),
       verified.toc.length ? JSON.stringify(verified.toc) : null,
-      buildCatalogIndexText([row.title_zh, row.original_title, ...verified.toc.slice(0, 25)]),
+      bundleSearchText(row, verified.toc),
       row.catalog_edition_id,
     );
     manifestBooks.push({

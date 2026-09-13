@@ -14,7 +14,13 @@
       "微积分",
       "代数",
       "几何",
-      "数学"
+      "数学",
+      "linear algebra",
+      "discrete mathematics",
+      "number theory",
+      "线性代数",
+      "离散数学",
+      "数论"
     ]
   },
   {
@@ -29,7 +35,15 @@
       "data science",
       "概率",
       "统计",
-      "数据科学"
+      "数据科学",
+      "data analysis",
+      "regression",
+      "statistical inference",
+      "probability theory",
+      "概率论",
+      "统计学",
+      "数据分析",
+      "回归分析"
     ]
   },
   {
@@ -47,7 +61,14 @@
       "计算机",
       "编程",
       "算法",
-      "软件"
+      "软件",
+      "computer programming",
+      "software engineering",
+      "databases",
+      "operating systems",
+      "计算机科学",
+      "操作系统",
+      "数据库"
     ]
   },
   {
@@ -84,7 +105,11 @@
       "物理",
       "天文",
       "力学",
-      "相对论"
+      "相对论",
+      "astrophysics",
+      "cosmology",
+      "天体物理",
+      "宇宙学"
     ]
   },
   {
@@ -92,7 +117,18 @@
     "zh": "化学与材料",
     "en": "Chemistry & Materials",
     "gutendexTopics": ["chemistry"],
-    "keywords": ["chemistry", "chemical", "metallurgy", "materials science", "化学", "材料"]
+    "keywords": [
+      "chemistry",
+      "chemical",
+      "metallurgy",
+      "materials science",
+      "化学",
+      "材料",
+      "organic chemistry",
+      "physical chemistry",
+      "有机化学",
+      "物理化学"
+    ]
   },
   {
     "id": "life-health",
@@ -116,7 +152,11 @@
       "医学",
       "健康",
       "遗传",
-      "生理"
+      "生理",
+      "public health",
+      "nutrition science",
+      "公共卫生",
+      "营养学"
     ]
   },
   {
@@ -138,7 +178,10 @@
       "地理",
       "气候",
       "环境",
-      "农业"
+      "农业",
+      "agricultural science",
+      "农作物",
+      "气象学"
     ]
   },
   {
@@ -159,7 +202,11 @@
       "工程",
       "机械",
       "电气",
-      "技术"
+      "技术",
+      "electrical engineering",
+      "mechanical engineering",
+      "土木工程",
+      "航空工程"
     ]
   },
   {
@@ -179,7 +226,13 @@
       "经济",
       "金融",
       "管理",
-      "财富"
+      "财富",
+      "microeconomics",
+      "macroeconomics",
+      "accounting",
+      "微观经济学",
+      "宏观经济学",
+      "会计学"
     ]
   },
   {
@@ -187,7 +240,18 @@
     "zh": "心理与认知科学",
     "en": "Psychology & Cognitive Science",
     "gutendexTopics": ["psychology"],
-    "keywords": ["psychology", "psychoanalysis", "psychical", "mind", "cognitive", "心理", "认知"]
+    "keywords": [
+      "psychology",
+      "psychoanalysis",
+      "psychical",
+      "mind",
+      "cognitive",
+      "心理",
+      "认知",
+      "cognitive psychology",
+      "发展心理学",
+      "行为科学"
+    ]
   },
   {
     "id": "education",
@@ -203,7 +267,11 @@
       "study",
       "教育",
       "教学",
-      "学习"
+      "学习",
+      "academic writing",
+      "study skills",
+      "学术写作",
+      "学习方法"
     ]
   },
   {
@@ -224,7 +292,12 @@
       "历史",
       "社会",
       "政治",
-      "法律"
+      "法律",
+      "world history",
+      "political theory",
+      "世界史",
+      "政治学",
+      "人类学"
     ]
   },
   {
@@ -242,7 +315,9 @@
       "哲学",
       "伦理",
       "逻辑",
-      "宗教"
+      "宗教",
+      "religious studies",
+      "宗教学"
     ]
   },
   {
@@ -265,7 +340,10 @@
       "文学",
       "小说",
       "诗歌",
-      "语言"
+      "语言",
+      "language learning",
+      "语言学",
+      "语言学习"
     ]
   },
   {
@@ -285,7 +363,13 @@
       "艺术",
       "音乐",
       "绘画",
-      "设计"
+      "设计",
+      "visual arts",
+      "art history",
+      "media studies",
+      "艺术史",
+      "传播学",
+      "媒体研究"
     ]
   }
 ]
