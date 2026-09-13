@@ -59,10 +59,10 @@ console.log("distinct works (heuristic):", distinctWorks);
 console.log("by provider:", byProvider.map((r) => `${r.p}=${r.n}`).join(", "));
 console.log("by availability:", byAvailability.map((r) => `${r.a}=${r.n}`).join(", "));
 console.log("bundled Chinese editions:", bundledZh);
-console.log("online with real download/landing URL:", verifiedOnline);
+console.log("online entries with direct download URL (rest use landing page):", verifiedOnline);
 console.log("by language (top):", byLanguage.map((r) => `${r.l}=${r.n}`).join(", "));
 console.log("by subject:");
-for (const s of subjects) console.log(`  ${s.zh} (${s.id}): ${subjectCounts[s.id]}`);
+for (const s of subjects) console.log(`  ${s.zh_name} (${s.id}): ${subjectCounts[s.id]}`);
 const manifest = JSON.parse(readFileSync(path.join(SEED_DIR, "manifest.json"), "utf8"));
 console.log("bundled files:", manifest.books.length);
 for (const b of manifest.books) {
