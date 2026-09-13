@@ -108,5 +108,17 @@ export async function ensureCatalogSeeded(): Promise<CatalogSeedResult> {
     await platform.kvSetItem(SEED_BUILT_AT_KEY, manifest.builtAt);
   }
 
+  // One-click downloads interrupted by a crash/kill never show a phantom
+  // "ready" — they become retryable failures on the next launch.
+  const { resetStaleDownloadingTasks } = await import("@readany/core/db/catalog-acquire-queries");
+  const { initDatabase } = await import("@readany/core/db");
+  try {
+    await initDatabase();
+    const reset = await resetStaleDownloadingTasks();
+    if (reset > 0) console.log(`[catalog] reset ${reset} interrupted download task(s)`);
+  } catch (err) {
+    console.warn("[catalog] stale download reset failed:", err);
+  }
+
   return { dbPath, seedBase, manifest, installed: needsInstall };
 }

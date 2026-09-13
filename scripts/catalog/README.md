@@ -17,10 +17,16 @@ OAPEN/DOAB 是计划的规模扩容来源：旧 REST 接口只返回无元数据
 ## 构建
 
 ```bash
-pnpm catalog:build   # 抓取 Gutendex + OTL → packages/app/src-tauri/resources/catalog-seed/catalog.sqlite
-pnpm catalog:seed    # 下载精选书 → 验证 → 回填 sha256/toc → books/ + manifest.json + t2s-chars.json
-pnpm catalog:stats   # 打印真实统计（学科/语言/获取状态）
+pnpm catalog:build    # 抓取 Gutendex + OTL → catalog.sqlite（LIB-1 基线）
+pnpm catalog:seed     # 下载精选书 → 验证 → 回填 sha256/toc → books/ + manifest.json + t2s-chars.json
+pnpm catalog:expand   # LIB-2 扩容：DOAB 目录（官方 REST，带许可元数据）+ 300+ 本
+                      # Gutenberg 在线条目实际下载验证（同 verify-lib 规则），回填 sha256/verified_at
+pnpm catalog:stats    # 打印真实统计（学科/语言/获取状态）
 ```
+
+`verify-lib.mjs` 是资源验证的规范实现（EPUB 容器/spine/正文抽样、PDF 页对象）；
+在线条目验证通过后记录 sha256，应用内「下载到书库」会对下载结果做同样的哈希校验，
+不匹配即拒绝导入。
 
 产物目录 `packages/app/src-tauri/resources/catalog-seed/` 随安装包发布：
 

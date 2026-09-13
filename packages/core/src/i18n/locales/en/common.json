@@ -127,6 +127,12 @@
       "tr": "Turkish",
       "hi": "Hindi",
       "unknown": "Unknown"
-    }
+    },
+    "download": "Download to library",
+    "downloadAndRead": "Download and read",
+    "downloading": "Downloading…",
+    "retryDownload": "Retry download",
+    "inLibrary": "In library",
+    "acquireFailed": "Acquisition failed"
   }
 }

@@ -2,7 +2,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { installAndOpenBundledBook } from "@/lib/catalog/acquire";
+import {
+  acquireOnlineEdition,
+  installAndOpenBundledBook,
+  refreshAcquireTasks,
+  subscribeAcquireTasks,
+} from "@/lib/catalog/acquire";
 import { getCatalogEdition, getCatalogStats, queryCatalog } from "@/lib/catalog/repository";
 import type { CatalogSeedManifest } from "@/lib/catalog/seed";
 import { ensureCatalogSeeded } from "@/lib/catalog/seed";
@@ -12,8 +17,9 @@ import {
   type CatalogEdition,
   type CatalogStats,
 } from "@readany/core/catalog";
+import type { CatalogAcquireTask } from "@readany/core/db/catalog-acquire-queries";
 import { cn } from "@readany/core/utils";
-import { BookMarked, ExternalLink, Loader2, Search } from "lucide-react";
+import { BookMarked, Download, ExternalLink, Loader2, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -64,6 +70,15 @@ export function CatalogPage() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detail, setDetail] = useState<CatalogEdition | null>(null);
   const [installingId, setInstallingId] = useState<string | null>(null);
+  const [acquireTasks, setAcquireTasks] = useState<Record<string, CatalogAcquireTask>>({});
+
+  // Acquire task states (one-click downloads) — pushes arrive from acquire.ts.
+  useEffect(() => subscribeAcquireTasks(setAcquireTasks), []);
+  useEffect(() => {
+    ensureCatalogSeeded()
+      .then(() => refreshAcquireTasks())
+      .catch(() => {});
+  }, []);
 
   // Debounce the search box into the committed query.
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -140,6 +155,13 @@ export function CatalogPage() {
       } finally {
         setInstallingId(null);
       }
+    },
+    [t],
+  );
+
+  const handleDownload = useCallback(
+    (edition: CatalogEdition) => {
+      void acquireOnlineEdition(edition, t);
     },
     [t],
   );
@@ -287,8 +309,10 @@ export function CatalogPage() {
                   key={edition.catalogEditionId}
                   edition={edition}
                   installing={installingId === edition.catalogEditionId}
+                  task={acquireTasks[edition.catalogEditionId]}
                   onOpen={() => void openDetail(edition)}
                   onRead={() => void handleRead(edition)}
+                  onDownload={() => void handleDownload(edition)}
                 />
               ))}
             </div>
@@ -316,7 +340,9 @@ export function CatalogPage() {
           if (!open) setDetailId(null);
         }}
         installing={detail ? installingId === detail.catalogEditionId : false}
+        task={detail ? acquireTasks[detail.catalogEditionId] : undefined}
         onRead={detail ? () => void handleRead(detail) : undefined}
+        onDownload={detail ? () => handleDownload(detail) : undefined}
       />
     </div>
   );
@@ -325,19 +351,29 @@ export function CatalogPage() {
 function CatalogCard({
   edition,
   installing,
+  task,
   onOpen,
   onRead,
+  onDownload,
 }: {
   edition: CatalogEdition;
   installing: boolean;
+  task?: CatalogAcquireTask;
   onOpen: () => void;
   onRead: () => void;
+  onDownload: () => void;
 }) {
   const { t } = useTranslation();
   const displayTitle = edition.titleZh || edition.originalTitle;
   const showOriginal =
     edition.titleZh && edition.titleZh !== edition.originalTitle ? edition.originalTitle : null;
   const subjects = CATALOG_SUBJECTS.filter((s) => edition.subjectIds.includes(s.id));
+  const canDownload = edition.resource.availability === "online" && !!edition.resource.downloadUrl;
+  const downloading = task?.status === "downloading";
+  const downloadPct =
+    downloading && task?.totalBytes
+      ? Math.min(100, Math.round((task.bytesDownloaded / task.totalBytes) * 100))
+      : null;
 
   return (
     <div
@@ -381,6 +417,14 @@ function CatalogCard({
           {t(`catalog.lang.${edition.language}`, edition.language)}
         </span>
       </div>
+      {downloading && (
+        <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-primary transition-all duration-300"
+            style={{ width: `${downloadPct ?? 5}%` }}
+          />
+        </div>
+      )}
       <div className="mt-auto flex w-full items-center justify-between pt-1">
         <span className="truncate text-[10px] text-muted-foreground/70">
           {[edition.publisher, edition.year ? String(edition.year) : null]
@@ -403,6 +447,38 @@ function CatalogCard({
             )}
           </button>
         )}
+        {canDownload && (
+          <button
+            type="button"
+            disabled={downloading}
+            className={cn(
+              "rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors",
+              task?.status === "failed"
+                ? "border-amber-500/50 text-amber-600 hover:bg-amber-500 hover:text-background dark:text-amber-400"
+                : "hover:bg-foreground hover:text-background",
+              downloading && "cursor-default opacity-70",
+            )}
+            title={task?.error}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDownload();
+            }}
+          >
+            {downloading ? (
+              <span className="inline-flex items-center gap-1">
+                <Loader2 className="inline h-3 w-3 animate-spin" />
+                {downloadPct !== null ? `${downloadPct}%` : t("catalog.downloading")}
+              </span>
+            ) : task?.status === "ready" ? (
+              t("catalog.inLibrary")
+            ) : (
+              <span className="inline-flex items-center gap-1">
+                <Download className="inline h-3 w-3" />
+                {task?.status === "failed" ? t("catalog.retryDownload") : t("catalog.download")}
+              </span>
+            )}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -413,13 +489,17 @@ function CatalogDetailDialog({
   open,
   onOpenChange,
   installing,
+  task,
   onRead,
+  onDownload,
 }: {
   edition: CatalogEdition | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   installing: boolean;
+  task?: CatalogAcquireTask;
   onRead?: () => void;
+  onDownload?: () => void;
 }) {
   const { t } = useTranslation();
   if (!edition) return null;
@@ -527,6 +607,31 @@ function CatalogDetailDialog({
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   t("catalog.installAndRead")
+                )}
+              </Button>
+            ) : edition.resource.availability === "online" && edition.resource.downloadUrl ? (
+              <Button
+                size="sm"
+                disabled={task?.status === "downloading"}
+                variant={task?.status === "failed" ? "outline" : "default"}
+                onClick={onDownload}
+              >
+                {task?.status === "downloading" ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    {task?.totalBytes
+                      ? `${Math.min(100, Math.round((task.bytesDownloaded / task.totalBytes) * 100))}%`
+                      : t("catalog.downloading")}
+                  </span>
+                ) : task?.status === "ready" ? (
+                  t("catalog.inLibrary")
+                ) : (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Download className="h-3.5 w-3.5" />
+                    {task?.status === "failed"
+                      ? t("catalog.retryDownload")
+                      : t("catalog.downloadAndRead")}
+                  </span>
                 )}
               </Button>
             ) : edition.resource.availability === "online" ? (

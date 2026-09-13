@@ -159,15 +159,7 @@ export async function aiTranslateBatch(
 ): Promise<string[]> {
   // Single text — just delegate
   if (texts.length <= 1) {
-    return aiTranslate(
-      texts,
-      sourceLang,
-      targetLang,
-      apiKey,
-      baseUrl,
-      model,
-      useExactRequestUrl,
-    );
+    return aiTranslate(texts, sourceLang, targetLang, apiKey, baseUrl, model, useExactRequestUrl);
   }
 
   const requestUrl = buildOpenAICompatibleUrl(
@@ -223,15 +215,7 @@ export async function aiTranslateBatch(
   }
 
   // Fallback to individual
-  return aiTranslate(
-    texts,
-    sourceLang,
-    targetLang,
-    apiKey,
-    baseUrl,
-    model,
-    useExactRequestUrl,
-  );
+  return aiTranslate(texts, sourceLang, targetLang, apiKey, baseUrl, model, useExactRequestUrl);
 }
 
 /** Parse "1. xxx\n2. yyy\n..." format into an array */
@@ -283,14 +267,20 @@ export function getDeepLUrl(baseUrl: string | undefined, path: "translate" | "us
 }
 
 function isOfficialDeepLHost(hostname: string): boolean {
-  return hostname === "api.deepl.com" || hostname === "api-free.deepl.com" || hostname.endsWith(".deepl.com");
+  return (
+    hostname === "api.deepl.com" ||
+    hostname === "api-free.deepl.com" ||
+    hostname.endsWith(".deepl.com")
+  );
 }
 
 function resolveDeepLConfig(baseUrl: string | undefined, apiKey: string): ResolvedDeepLConfig {
   const rawBaseUrl = baseUrl?.trim();
   const normalizedBaseUrl = normalizeDeepLBaseUrl(rawBaseUrl);
   const url = new URL(normalizedBaseUrl);
-  const rawPathSegments = (rawBaseUrl ? new URL(rawBaseUrl) : url).pathname.split("/").filter(Boolean);
+  const rawPathSegments = (rawBaseUrl ? new URL(rawBaseUrl) : url).pathname
+    .split("/")
+    .filter(Boolean);
   const pathSegments = [...rawPathSegments];
   const hasTranslateSuffix = (rawBaseUrl || "").replace(/\/+$/, "").endsWith("/translate");
   const exactTranslateUrl = hasTranslateSuffix ? (rawBaseUrl || "").replace(/\/+$/, "") : undefined;
@@ -329,7 +319,12 @@ function resolveDeepLConfig(baseUrl: string | undefined, apiKey: string): Resolv
 }
 
 function extractDeepLXTranslation(data: any): string | null {
-  const candidate = typeof data?.data === "string" ? data.data : typeof data?.translation === "string" ? data.translation : null;
+  const candidate =
+    typeof data?.data === "string"
+      ? data.data
+      : typeof data?.translation === "string"
+        ? data.translation
+        : null;
   if (!candidate) {
     return null;
   }
@@ -569,14 +564,116 @@ export function toMicrosoftLangCode(lang: string): string {
 
 /** Microsoft supported source languages (subset for validation) */
 const MS_SUPPORTED_LANGS = new Set([
-  "af", "am", "ar", "as", "az", "ba", "bg", "bn", "bo", "bs", "ca", "cs", "cy", "da", "de",
-  "dv", "el", "en", "es", "et", "eu", "fa", "fi", "fil", "fj", "fo", "fr", "ga", "gl", "gu",
-  "ha", "he", "hi", "hr", "ht", "hu", "hy", "id", "ig", "ikt", "is", "it", "iu", "ja", "ka",
-  "kk", "km", "kn", "ko", "ku", "ky", "ln", "lo", "lt", "lv", "mg", "mi", "mk", "ml", "mn",
-  "mr", "ms", "mt", "my", "nb", "ne", "nl", "no", "or", "pa", "pl", "ps", "pt", "ro", "ru",
-  "rw", "sd", "si", "sk", "sl", "sm", "sn", "so", "sq", "sr", "st", "sv", "sw", "ta", "te",
-  "th", "ti", "tk", "tl", "tn", "to", "tr", "tt", "ty", "ug", "uk", "ur", "uz", "vi", "xh",
-  "yo", "yue", "zh-Hans", "zh-Hant", "zu",
+  "af",
+  "am",
+  "ar",
+  "as",
+  "az",
+  "ba",
+  "bg",
+  "bn",
+  "bo",
+  "bs",
+  "ca",
+  "cs",
+  "cy",
+  "da",
+  "de",
+  "dv",
+  "el",
+  "en",
+  "es",
+  "et",
+  "eu",
+  "fa",
+  "fi",
+  "fil",
+  "fj",
+  "fo",
+  "fr",
+  "ga",
+  "gl",
+  "gu",
+  "ha",
+  "he",
+  "hi",
+  "hr",
+  "ht",
+  "hu",
+  "hy",
+  "id",
+  "ig",
+  "ikt",
+  "is",
+  "it",
+  "iu",
+  "ja",
+  "ka",
+  "kk",
+  "km",
+  "kn",
+  "ko",
+  "ku",
+  "ky",
+  "ln",
+  "lo",
+  "lt",
+  "lv",
+  "mg",
+  "mi",
+  "mk",
+  "ml",
+  "mn",
+  "mr",
+  "ms",
+  "mt",
+  "my",
+  "nb",
+  "ne",
+  "nl",
+  "no",
+  "or",
+  "pa",
+  "pl",
+  "ps",
+  "pt",
+  "ro",
+  "ru",
+  "rw",
+  "sd",
+  "si",
+  "sk",
+  "sl",
+  "sm",
+  "sn",
+  "so",
+  "sq",
+  "sr",
+  "st",
+  "sv",
+  "sw",
+  "ta",
+  "te",
+  "th",
+  "ti",
+  "tk",
+  "tl",
+  "tn",
+  "to",
+  "tr",
+  "tt",
+  "ty",
+  "ug",
+  "uk",
+  "ur",
+  "uz",
+  "vi",
+  "xh",
+  "yo",
+  "yue",
+  "zh-Hans",
+  "zh-Hant",
+  "zu",
 ]);
 
 /** Get or refresh the free Microsoft Edge translate JWT token */
@@ -605,7 +702,10 @@ export async function microsoftTranslate(
   const token = await getMicrosoftToken();
   const mappedSource = toMicrosoftLangCode(sourceLang);
   // If source lang is "auto"/"AUTO", empty, or not recognized by Microsoft, omit it for auto-detection
-  const from = (!sourceLang || sourceLang.toLowerCase() === "auto" || !MS_SUPPORTED_LANGS.has(mappedSource)) ? "" : mappedSource;
+  const from =
+    !sourceLang || sourceLang.toLowerCase() === "auto" || !MS_SUPPORTED_LANGS.has(mappedSource)
+      ? ""
+      : mappedSource;
   const to = toMicrosoftLangCode(targetLang);
   const params = new URLSearchParams({
     "api-version": "3.0",

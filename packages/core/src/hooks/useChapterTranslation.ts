@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSettingsStore } from "../stores/settings-store";
-import { getFromCache } from "../translation/cache";
+import { getFromCache, translationCacheVariant } from "../translation/cache";
 import {
   clearChapterCache,
   getChapterTranslationSettings,
@@ -34,7 +34,13 @@ export type ChapterTranslationState =
   | { status: "idle" }
   | { status: "extracting" }
   | { status: "translating"; progress: ChapterTranslationProgress }
-  | { status: "complete"; originalVisible: boolean; translationVisible: boolean }
+  | {
+      status: "complete";
+      originalVisible: boolean;
+      translationVisible: boolean;
+      /** Paragraphs left untranslated after retries — blank output is never success. */
+      failedCount: number;
+    }
   | { status: "error"; message: string };
 
 export interface UseChapterTranslationOptions {
@@ -145,6 +151,7 @@ export function useChapterTranslation(options: UseChapterTranslationOptions) {
           progress: { totalChars, translatedChars: 0 },
         });
 
+        let failedParagraphIds: string[] = [];
         await translateChapter({
           paragraphs,
           sourceLang: "AUTO",
@@ -156,19 +163,29 @@ export function useChapterTranslation(options: UseChapterTranslationOptions) {
           onChunkComplete: (results) => {
             void injectTranslations(results, visibilityRef.current);
           },
+          onChunkError: (info) => {
+            failedParagraphIds = info.paragraphIds;
+          },
           signal: abortController.signal,
         });
 
-        // Mark chapter fully cached
-        markChapterFullyCached(bookId, sectionIndex, config.targetLang).catch((err) =>
-          console.warn("[Translation] Failed to mark chapter cached:", err),
-        );
+        // Only mark the chapter fully cached when every paragraph actually got
+        // a translation — otherwise auto-restore would resurrect blank output.
+        if (failedParagraphIds.length === 0) {
+          markChapterFullyCached(bookId, sectionIndex, config.targetLang).catch((err) =>
+            console.warn("[Translation] Failed to mark chapter cached:", err),
+          );
+        }
 
-        setState({ status: "complete", ...visibilityRef.current });
+        setState({
+          status: "complete",
+          ...visibilityRef.current,
+          failedCount: failedParagraphIds.length,
+        });
       } catch (err) {
         if ((err as Error)?.name === "AbortError") {
           // Cancelled — keep whatever was already injected, go to complete
-          setState({ status: "complete", ...visibilityRef.current });
+          setState({ status: "complete", ...visibilityRef.current, failedCount: 0 });
         } else {
           setState({
             status: "error",
@@ -269,6 +286,12 @@ export function useChapterTranslation(options: UseChapterTranslationOptions) {
         const paragraphs = await getParagraphsRef.current();
         if (cancelled) return;
         const providerId = translationConfig.provider.id;
+        const cacheVariant = translationCacheVariant(
+          providerId,
+          providerId === "ai"
+            ? translationConfig.provider.model || aiConfig.activeModel
+            : undefined,
+        );
         const results: ChapterTranslationResult[] = [];
 
         for (const p of paragraphs) {
@@ -277,6 +300,7 @@ export function useChapterTranslation(options: UseChapterTranslationOptions) {
             "AUTO",
             translationConfig.targetLang,
             providerId,
+            cacheVariant,
           );
           if (translation) {
             results.push({
@@ -304,6 +328,7 @@ export function useChapterTranslation(options: UseChapterTranslationOptions) {
           setState({
             status: "complete",
             ...visibility,
+            failedCount: 0,
           });
         }
       } catch (err) {
@@ -323,6 +348,8 @@ export function useChapterTranslation(options: UseChapterTranslationOptions) {
     sectionIndex,
     translationConfig.targetLang,
     translationConfig.provider.id,
+    translationConfig.provider.model,
+    aiConfig.activeModel,
   ]);
 
   return {

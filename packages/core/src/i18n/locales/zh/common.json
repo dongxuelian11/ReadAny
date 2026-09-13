@@ -127,6 +127,12 @@
       "tr": "土耳其语",
       "hi": "印地语",
       "unknown": "未知"
-    }
+    },
+    "download": "下载到书库",
+    "downloadAndRead": "下载并阅读",
+    "downloading": "下载中…",
+    "retryDownload": "重试下载",
+    "inLibrary": "已在书库",
+    "acquireFailed": "获取失败"
   }
 }

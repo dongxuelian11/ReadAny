@@ -10,15 +10,34 @@ import type { TranslatorName } from "./types";
 
 const CACHE_PREFIX = "readany_translation_cache_";
 
+/**
+ * Extra key material that invalidates cached translations when the thing that
+ * produced them changes. For the "ai" provider this is the model + prompt
+ * version — switching providers or models must never reuse the previous
+ * model's output as if it were fresh.
+ */
+export function translationCacheVariant(
+  provider: TranslatorName,
+  model?: string,
+): string | undefined {
+  if (provider !== "ai") return undefined;
+  return `m${model || "default"}_p${AI_TRANSLATION_PROMPT_VERSION}`;
+}
+
+/** Bump when the AI translation prompt changes in a way that alters output. */
+export const AI_TRANSLATION_PROMPT_VERSION = 2;
+
 /** Generate cache key */
 function getCacheKey(
   text: string,
   sourceLang: string,
   targetLang: string,
   provider: TranslatorName,
+  variant?: string,
 ): string {
   const hash = simpleHash(text);
-  return `${CACHE_PREFIX}${provider}_${sourceLang}_${targetLang}_${hash}`;
+  const suffix = variant ? `_${variant}` : "";
+  return `${CACHE_PREFIX}${provider}_${sourceLang}_${targetLang}_${hash}${suffix}`;
 }
 
 /** Simple hash function for cache key */
@@ -38,15 +57,16 @@ export async function getFromCache(
   sourceLang: string,
   targetLang: string,
   provider: TranslatorName,
+  variant?: string,
 ): Promise<string | null> {
   try {
     const platform = getPlatformService();
-    const key = getCacheKey(text, sourceLang, targetLang, provider);
+    const key = getCacheKey(text, sourceLang, targetLang, provider, variant);
     const cached = await platform.kvGetItem(key);
     if (cached) {
       const { translation, timestamp } = JSON.parse(cached);
-      // Cache expires after 7 days
-      if (Date.now() - timestamp < 7 * 24 * 60 * 60 * 1000) {
+      // Cache expires after 7 days; empty translations are never valid cache
+      if (translation && Date.now() - timestamp < 7 * 24 * 60 * 60 * 1000) {
         return translation;
       }
       await platform.kvRemoveItem(key);
@@ -64,10 +84,12 @@ export async function storeInCache(
   sourceLang: string,
   targetLang: string,
   provider: TranslatorName,
+  variant?: string,
 ): Promise<void> {
+  if (!translation) return;
   try {
     const platform = getPlatformService();
-    const key = getCacheKey(text, sourceLang, targetLang, provider);
+    const key = getCacheKey(text, sourceLang, targetLang, provider, variant);
     await platform.kvSetItem(
       key,
       JSON.stringify({
