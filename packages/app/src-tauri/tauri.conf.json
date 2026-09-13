@@ -54,7 +54,8 @@
     "targets": "all",
     "createUpdaterArtifacts": true,
     "resources": {
-      "../../cli/dist/": "readany-cli/"
+      "../../cli/dist/": "readany-cli/",
+      "resources/catalog-seed/": "catalog-seed/"
     },
     "icon": [
       "icons/32x32.png",

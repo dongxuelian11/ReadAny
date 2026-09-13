@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "builtAt": "2026-09-13T07:30:38.498Z",
+  "seededAt": "2026-09-13T08:52:50.211Z",
+  "counts": {
+    "totalEditions": 3873,
+    "bundled": 14,
+    "online": 3857,
+    "metadataOnly": 2
+  },
+  "books": [
+    {
+      "catalogEditionId": "curated:happy-llm",
+      "file": "happy-llm.pdf",
+      "format": "pdf",
+      "sha256": "1b96edb5cb7be57b14ceba1733f5f6a74c94c972769457c3f504952064034713",
+      "sizeBytes": 20717304,
+      "licenseId": "CC BY-NC-SA 4.0",
+      "verifiedAt": "2026-09-13"
+    },
+    {
+      "catalogEditionId": "curated:hello-algo-zh-python",
+      "file": "hello-algo-zh-python.epub",
+      "format": "epub",
+      "sha256": "f2002668c8bb466fd5522e623145e0a18eb6116cc60282c5af124ad0e982d44f",
+      "sizeBytes": 22192685,
+      "licenseId": "CC BY-NC-SA 4.0",
+      "verifiedAt": "2026-09-13"
+    },
+    {
+      "catalogEditionId": "gutenberg:1228",
+      "file": "pg1228.epub",
+      "format": "epub",
+      "sha256": "f7fac5a8e8b9cf689b2fade216634c88246b9f4ed841148fad4d0cbaac6f61a3",
+      "sizeBytes": 440248,
+      "licenseId": "Public domain (US)",
+      "verifiedAt": "2026-09-13"
+    },
+    {
+      "catalogEditionId": "gutenberg:14264",
+      "file": "pg14264.epub",
+      "format": "epub",
+      "sha256": "ecf8cf5243dc54be46c1ac65c07130428bf69573d4800a95be7b70dac29f4004",
+      "sizeBytes": 7596056,
+      "licenseId": "Public domain (US)",
+      "verifiedAt": "2026-09-13"
+    },
+    {
+      "catalogEditionId": "gutenberg:1497",
+      "file": "pg1497.epub",
+      "format": "epub",
+      "sha256": "7e658b1046123f33285e0e6754e3b7e8d99e8cb39da108df49ea097f811210ee",
+      "sizeBytes": 516590,
+      "licenseId": "Public domain (US)",
+      "verifiedAt": "2026-09-13"
+    },
+    {
+      "catalogEditionId": "gutenberg:20848",
+      "file": "pg20848.epub",
+      "format": "epub",
+      "sha256": "cc7821a34010e5436ecba9037e9dfe4df217b2950ce7fff784bd8d4d9fcc4329",
+      "sizeBytes": 3425283,
+      "licenseId": "Public domain (US)",
+      "verifiedAt": "2026-09-13"
+    },
+    {
+      "catalogEditionId": "gutenberg:23962",
+      "file": "pg23962.epub",
+      "format": "epub",
+      "sha256": "b63314c3575ff3df6cd3e327eb9abfcf2e62e538dfe910fca65bce9baef4dac5",
+      "sizeBytes": 1096086,
+      "licenseId": "Public domain (US)",
+      "verifiedAt": "2026-09-13"
+    },
+    {
+      "catalogEditionId": "gutenberg:24264",
+      "file": "pg24264.epub",
+      "format": "epub",
+      "sha256": "b22f646c96d4d76f5a59e31002706d79fff5109469d7b010170363cbe5c80820",
+      "sizeBytes": 1228135,
+      "licenseId": "Public domain (US)",
+      "verifiedAt": "2026-09-13"
+    },
+    {
+      "catalogEditionId": "gutenberg:3300",
+      "file": "pg3300.epub",
+      "format": "epub",
+      "sha256": "4e7b2dc1f8af4e6dd22faaba604eb02a1601d4d37097bb8d3f39dbada5096c06",
+      "sizeBytes": 946887,
+      "licenseId": "Public domain (US)",
+      "verifiedAt": "2026-09-13"
+    },
+    {
+      "catalogEditionId": "gutenberg:33283",
+      "file": "pg33283.epub",
+      "format": "epub",
+      "sha256": "256371b889e29ab74fafd2efc1b75f0344438809d873ea76dd3231cf7d364dd0",
+      "sizeBytes": 13214664,
+      "licenseId": "Public domain (US)",
+      "verifiedAt": "2026-09-13"
+    },
+    {
+      "catalogEditionId": "gutenberg:35461",
+      "file": "pg35461.epub",
+      "format": "epub",
+      "sha256": "98becd535ea5e711b46e926aa11dde4d4fa13a75e3eafa438f282e696697aa14",
+      "sizeBytes": 10334566,
+      "licenseId": "Public domain (US)",
+      "verifiedAt": "2026-09-13"
+    },
+    {
+      "catalogEditionId": "gutenberg:38219",
+      "file": "pg38219.epub",
+      "format": "epub",
+      "sha256": "08601035e8af3230a417eee79134d5458752e4dbd85d8f3a1101bc9da136c3c4",
+      "sizeBytes": 676697,
+      "licenseId": "Public domain (US)",
+      "verifiedAt": "2026-09-13"
+    },
+    {
+      "catalogEditionId": "gutenberg:5001",
+      "file": "pg5001.epub",
+      "format": "epub",
+      "sha256": "6a43445dc5aa7aa9ce86629e0c876bd6aa89db2863690409fb1f3b8736c1a926",
+      "sizeBytes": 911126,
+      "licenseId": "Public domain (US)",
+      "verifiedAt": "2026-09-13"
+    },
+    {
+      "catalogEditionId": "gutenberg:852",
+      "file": "pg852.epub",
+      "format": "epub",
+      "sha256": "80c307a04a61e7a1325c503d9e694dd68f38fac3fcd83e716ccca01703063747",
+      "sizeBytes": 408025,
+      "licenseId": "Public domain (US)",
+      "verifiedAt": "2026-09-13"
+    }
+  ]
+}
