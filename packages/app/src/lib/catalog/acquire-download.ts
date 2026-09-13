@@ -85,7 +85,9 @@ export async function downloadAndVerifyCatalogFile(
 
   const format = extensionFor(edition);
   const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
-  const response = await tauriFetch(downloadUrl, { signal, danger: { acceptInvalidCerts: false } });
+  // Default plugin-http config already validates TLS certificates — no danger
+  // overrides.
+  const response = await tauriFetch(downloadUrl, { signal });
   if (!response.ok) {
     throw new AcquireError(`下载失败：HTTP ${response.status}`);
   }
