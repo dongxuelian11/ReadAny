@@ -72,10 +72,23 @@ export interface CatalogSeedResult {
 
 /**
  * Ensure the read-only catalog snapshot exists in the user data dir and is
- * up to date with the shipped version. Safe to call repeatedly; cheap when
- * already seeded.
+ * up to date with the shipped version. Single-flight: concurrent callers
+ * (page effects + the DB opener) share one run — two concurrent copies of the
+ * same target file fail with a sharing violation on Windows.
  */
-export async function ensureCatalogSeeded(): Promise<CatalogSeedResult> {
+let seedPromise: Promise<CatalogSeedResult> | null = null;
+
+export function ensureCatalogSeeded(): Promise<CatalogSeedResult> {
+  if (!seedPromise) {
+    seedPromise = doEnsureCatalogSeeded().catch((err) => {
+      seedPromise = null;
+      throw err;
+    });
+  }
+  return seedPromise;
+}
+
+async function doEnsureCatalogSeeded(): Promise<CatalogSeedResult> {
   // Wait for the data-root placement/migration so the snapshot lands on the
   // final root (D: drive) instead of racing into the default AppData location.
   await getDataRootReady();
@@ -96,6 +109,7 @@ export async function ensureCatalogSeeded(): Promise<CatalogSeedResult> {
     storedVersion !== String(manifest.schemaVersion) ||
     storedBuiltAt !== manifest.builtAt;
 
+  let installed = false;
   if (needsInstall) {
     const catalogDir = await resolveDesktopDataPath("catalog");
     try {
@@ -103,9 +117,21 @@ export async function ensureCatalogSeeded(): Promise<CatalogSeedResult> {
     } catch {
       /* already exists */
     }
-    await copyFile(await join(seedBase, "catalog.sqlite"), dbPath);
-    await platform.kvSetItem(SEED_VERSION_KEY, String(CATALOG_SCHEMA_VERSION));
-    await platform.kvSetItem(SEED_BUILT_AT_KEY, manifest.builtAt);
+    try {
+      await copyFile(await join(seedBase, "catalog.sqlite"), dbPath);
+      await platform.kvSetItem(SEED_VERSION_KEY, String(CATALOG_SCHEMA_VERSION));
+      await platform.kvSetItem(SEED_BUILT_AT_KEY, manifest.builtAt);
+      installed = true;
+    } catch (err) {
+      if (dbExists) {
+        // The stale copy still works — retry the upgrade on the next launch
+        // (markers are intentionally NOT updated). Never block the library on
+        // a snapshot refresh.
+        console.warn("[catalog] snapshot refresh failed, using existing copy:", err);
+      } else {
+        throw err;
+      }
+    }
   }
 
   // One-click downloads interrupted by a crash/kill never show a phantom
@@ -120,5 +146,5 @@ export async function ensureCatalogSeeded(): Promise<CatalogSeedResult> {
     console.warn("[catalog] stale download reset failed:", err);
   }
 
-  return { dbPath, seedBase, manifest, installed: needsInstall };
+  return { dbPath, seedBase, manifest, installed };
 }
