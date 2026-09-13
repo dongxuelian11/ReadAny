@@ -237,6 +237,37 @@ async function applyEvidenceEventLocked(
   if (storedEvent) {
     if (!sameImmutablePayload(storedEvent, event)) throw new EvidenceConflictError(event.id);
     event.timestamp = storedEvent.timestamp;
+
+    // PR33 A-line (L01) upgrade boundary for PRE-completion legacy rows — the
+    // stored event exists but no completion record was ever written. Three
+    // provable states, handled without inventing an event platform:
+    //
+    // 1. Card AND mastery markers still equal this event id: the event was
+    //    fully applied. Backfill the completion so no later marker-changing
+    //    event can ever let this replay re-enter the update branches.
+    // 2. The markers were already moved by a LATER event and a durable review
+    //    log exists for THIS event: the event at least reached its FSRS step,
+    //    but whether its BKT step ran can no longer be proven from live state.
+    //    Re-applying would double-count (the documented regression) — fail
+    //    SAFE: report already-applied, mutate nothing, backfill nothing (the
+    //    row stays flagged for review by staying completion-less).
+    // 3. Otherwise this is a genuine partial apply (log may exist, but the
+    //    markers were never advanced past their default) — fall through to the
+    //    resumable paths below, which repair the missing steps exactly once.
+    const priorCard = await deps.reviews.getCard(event.conceptId);
+    const priorMastery = await deps.mastery.get(event.conceptId);
+    if (priorCard?.lastEventId === event.id && priorMastery?.lastEventId === event.id) {
+      await deps.completions?.record(event.id, payloadJson);
+      return { mastery: priorMastery, alreadyApplied: true };
+    }
+    // The mastery row is the commit point: if a LATER event already advanced
+    // it, this replay can no longer prove whether the legacy event's own BKT
+    // step ran. With a durable log for this event, fail safe.
+    const markersSuperseded =
+      priorMastery != null && priorMastery.lastEventId != null && priorMastery.lastEventId !== event.id;
+    if (markersSuperseded && (await deps.reviews.hasLogForEvent?.(event.id)) === true) {
+      return { mastery: priorMastery, alreadyApplied: true };
+    }
   }
   // Computed only AFTER the (possibly adopted) timestamp is final.
   const reviewInstant = new Date(event.timestamp);
@@ -324,7 +355,13 @@ async function applyEvidenceEventLocked(
         // Markers already match: a pure replay of a fully applied event. If a
         // session advance was requested (answer retry whose session write was
         // lost), still run the guarded session write through the adapter.
-        if (!options?.session) return { mastery: prior, alreadyApplied: true };
+        if (!options?.session) {
+          // PR33 A-line (L01): a PRE-completion legacy row lands here on its
+          // first replay after upgrade — backfill the completion now so a
+          // later marker-changing event can never un-protect this attempt.
+          await deps.completions?.record(event.id, payloadJson);
+          return { mastery: prior, alreadyApplied: true };
+        }
         request = {
           event,
           payloadJson,

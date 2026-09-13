@@ -10,6 +10,7 @@ import { resolve } from "node:path";
 import { EvidenceConflictError, applyEvidenceEventResult } from "./engine";
 import type { EvidenceEventInput, LearnerEngineDeps } from "./engine";
 import type { PersonalCurriculum } from "./goal";
+import { createLearnerScheduler, newConceptCard, reviewConceptCard } from "./review";
 import { createInMemoryLearnerStores } from "./stores";
 import type { TeachingContent, TeachingLlmClient } from "./teaching";
 import { SessionStaleError, deliverCurrentStep, startTeachingSession } from "./teaching-engine";
@@ -426,6 +427,112 @@ describe("PR32 follow-up: first-answer counting and source-locator identity", ()
     expect(resumedA?.status).toBe("active");
     const noneC = await getActiveTeachingSession(deps, "book-c");
     expect(noneC).toBeNull();
+  });
+
+  it("L01: a legacy markers-only event is backfilled with its completion and never re-applies", async () => {
+    // Pre-completion legacy state: evidence + review log + card/mastery whose
+    // markers all equal A, but NO completion record (databases written by the
+    // pre-WP-A versions can legitimately look like this).
+    const { deps, stores } = createDeps();
+    const legacyEvent = { ...quizInput({ id: "legacy-A" }) };
+    await deps.evidence.append(legacyEvent);
+    const scheduler = createLearnerScheduler({});
+    const cardBefore = newConceptCard(legacyEvent.conceptId, new Date(legacyEvent.timestamp));
+    const reviewed = reviewConceptCard(scheduler, cardBefore, new Date(legacyEvent.timestamp), true);
+    await deps.reviews.appendLog({ ...reviewed.log, eventId: "legacy-A" });
+    await deps.reviews.putCard({ ...reviewed.card, lastEventId: "legacy-A" });
+    await deps.mastery.put({
+      conceptId: legacyEvent.conceptId,
+      mastery: 0.4,
+      confidence: 0.5,
+      retention: 0.9,
+      transfer: null,
+      lastVerified: legacyEvent.timestamp,
+      nextReview: reviewed.card.due,
+      status: "learning",
+      evidenceCount: 1,
+      updatedAt: legacyEvent.timestamp,
+      lastEventId: "legacy-A",
+    });
+    expect(await deps.completions?.get("legacy-A")).toBeNull();
+
+    // First replay of the upgrade: already-applied AND the completion record
+    // is backfilled, so no later event can un-protect this attempt.
+    const replay = await applyEvidenceEventResult(deps, { ...quizInput({ id: "legacy-A" }) });
+    expect(replay.alreadyApplied).toBe(true);
+    expect(await deps.completions?.get("legacy-A")).not.toBeNull();
+    expect(stores.logs()).toHaveLength(1);
+
+    // A new event B updates the markers; the historical A replay must STILL be
+    // a no-op (this is the documented L01 double-apply regression).
+    await applyEvidenceEventResult(deps, quizInput({ id: "B", result: "incorrect" }));
+    const afterB = await deps.mastery.get("stats/mean");
+    const replayAgain = await applyEvidenceEventResult(deps, { ...quizInput({ id: "legacy-A" }) });
+    expect(replayAgain.alreadyApplied).toBe(true);
+    expect(replayAgain.mastery.mastery).toBeCloseTo(afterB?.mastery ?? 0, 12);
+    expect(stores.events()).toHaveLength(2);
+    expect(stores.logs()).toHaveLength(2);
+  });
+
+  it("L01: a superseded markers-only event without a completion fails SAFE (no re-apply)", async () => {
+    // Degenerate upgrade state: A's evidence and review log exist but A never
+    // got a completion, and B (a newer event) already moved the markers. From
+    // the live state it cannot be proven whether A's BKT step ever ran —
+    // re-applying would double-count, so the replay must change nothing and
+    // backfill nothing.
+    const { deps, stores } = createDeps();
+    // Reconstruct the legacy rows for A (pre-completion era): ledger + log only.
+    const legacyA = { ...quizInput({ id: "A" }) };
+    await deps.evidence.append(legacyA);
+    await deps.reviews.appendLog({
+      conceptId: legacyA.conceptId,
+      rating: 3,
+      state: 0,
+      due: legacyA.timestamp + DAY_MS,
+      stability: 1,
+      difficulty: 5,
+      scheduledDays: 1,
+      learningSteps: 0,
+      review: legacyA.timestamp,
+      eventId: "A",
+    });
+    // B is applied by the CURRENT engine: markers move to B, completion B exists.
+    await applyEvidenceEventResult(deps, quizInput({ id: "B", result: "incorrect" }));
+    const afterB = await deps.mastery.get("stats/mean");
+    expect(await deps.completions?.get("A")).toBeNull();
+
+    const replay = await applyEvidenceEventResult(deps, { ...quizInput({ id: "A" }) });
+    expect(replay.alreadyApplied).toBe(true);
+    expect(replay.mastery.mastery).toBeCloseTo(afterB?.mastery ?? 0, 12);
+    expect(stores.events()).toHaveLength(2);
+    expect(stores.logs()).toHaveLength(2);
+    // The ambiguous row is left un-backfilled on purpose: it needs review.
+    expect(await deps.completions?.get("A")).toBeNull();
+  });
+
+  it("L01: a genuine partial apply (log written, mastery marker absent) still resumes", async () => {
+    const { deps, stores } = createDeps();
+    const answerTime = NOW.getTime() - DAY_MS;
+    // Crash window: ledger + review log landed, the card/mastery writes did not.
+    await deps.evidence.append({ ...quizInput({ id: "half" }), timestamp: answerTime });
+    const cardBefore = newConceptCard("stats/mean", new Date(answerTime));
+    const reviewed = reviewConceptCard(
+      createLearnerScheduler({}),
+      cardBefore,
+      new Date(answerTime),
+      true,
+    );
+    await deps.reviews.appendLog({ ...reviewed.log, eventId: "half" });
+
+    const resumed = await applyEvidenceEventResult(
+      deps,
+      { ...quizInput({ id: "half" }), timestamp: answerTime },
+    );
+    expect(resumed.alreadyApplied).toBe(false);
+    expect(resumed.mastery.lastEventId).toBe("half");
+    expect(resumed.mastery.lastVerified).toBe(answerTime);
+    expect(stores.logs()).toHaveLength(1, "the log stays deduplicated");
+    expect(await deps.completions?.get("half")).not.toBeNull();
   });
 
   it("the committed real-engine request fixture stays in sync with the engine output", async () => {

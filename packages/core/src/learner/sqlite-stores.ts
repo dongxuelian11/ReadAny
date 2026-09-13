@@ -302,6 +302,15 @@ export class SqliteLearnerReviewStore implements LearnerReviewStore {
     );
   }
 
+  async hasLogForEvent(eventId: string): Promise<boolean> {
+    const database = await this.db();
+    const existing = await database.select<{ id: number }>(
+      "SELECT id FROM learner_review_logs WHERE event_id = ? LIMIT 1",
+      [eventId],
+    );
+    return existing.length > 0;
+  }
+
   async listCardsDueBefore(timestamp: number, limit?: number): Promise<LearnerReviewCardData[]> {
     const database = await this.db();
     const bound = limit ?? -1;
@@ -584,8 +593,13 @@ export class SqliteLearnerCompletionStore implements LearnerEvidenceCompletionSt
   async record(eventId: string, payloadJson: string): Promise<void> {
     const database = await this.db();
     await runWithDbRetry(() =>
+      // REPLACE (PR33 A-line, P05): the engine records only after verifying the
+      // stored event matches, so replacing a LEGACY degraded fingerprint with
+      // the canonical one is the upgrade path — ignore-on-conflict would make
+      // it a silent no-op that re-verifies against the event row on every
+      // replay forever.
       database.execute(
-        "INSERT OR IGNORE INTO learner_evidence_completions (evidence_id, payload_json, applied_at) VALUES (?, ?, ?)",
+        "INSERT OR REPLACE INTO learner_evidence_completions (evidence_id, payload_json, applied_at) VALUES (?, ?, ?)",
         [eventId, payloadJson, Date.now()],
       ),
     );

@@ -113,6 +113,16 @@ jobs:
       - name: Build Windows NSIS installer
         run: pnpm --filter app tauri build --config src-tauri/tauri.ci.conf.json --ci
 
+      # PR33 (P01): the candidate installer must be retrievable from the run,
+      # not only reported as "build passed". Upload the NSIS bundle as a
+      # workflow artifact (no public Release without user authorization).
+      - name: Upload NSIS candidate artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: readany-windows-candidate
+          path: packages/app/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+
       # PR32-followup: the atomic learner commit (learner_commit.rs) owns
       # cross-language invariants the TypeScript suite cannot see. Runs AFTER
       # the build: the tauri build script requires the bundled CLI dist
