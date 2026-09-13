@@ -93,6 +93,9 @@ export function createInMemoryLearnerStores(_clock?: LearnerClock): InMemoryLear
       if (entry.eventId && logs.some((logged) => logged.eventId === entry.eventId)) return;
       logs.push({ ...entry });
     },
+    async hasLogForEvent(eventId) {
+      return logs.some((logged) => logged.eventId === eventId);
+    },
     async listCardsDueBefore(timestamp, limit) {
       return [...cards.values()]
         .filter((card) => card.due <= timestamp)
@@ -149,7 +152,11 @@ export function createInMemoryLearnerStores(_clock?: LearnerClock): InMemoryLear
       return payloadJson === undefined ? null : { payloadJson };
     },
     async record(eventId, payloadJson) {
-      if (!completionRows.has(eventId)) completionRows.set(eventId, payloadJson);
+      // REPLACE semantics (PR33 A-line, P05): the engine only records after it
+      // verified the stored event matches, so overwriting a LEGACY degraded
+      // fingerprint with the canonical one is the point — ignore-on-conflict
+      // would make the upgrade a silent no-op.
+      completionRows.set(eventId, payloadJson);
     },
   };
 

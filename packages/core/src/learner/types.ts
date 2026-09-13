@@ -163,6 +163,11 @@ export interface LearnerReviewStore {
   appendLog(entry: LearnerReviewLogEntry): Promise<void>;
   /** Cards whose due time is at or before the given epoch millis, ascending by due. */
   listCardsDueBefore(timestamp: number, limit?: number): Promise<LearnerReviewCardData[]>;
+  /** Whether a review log row exists for this event id (optional: legacy
+   * stores without event-id logging return false). Used by the upgrade
+   * boundary to tell a genuine partial apply apart from a pre-completion
+   * legacy row whose FSRS step already ran. */
+  hasLogForEvent?(eventId: string): Promise<boolean>;
 }
 
 /**
