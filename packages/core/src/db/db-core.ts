@@ -835,23 +835,28 @@ export async function initDatabase(): Promise<void> {
       // UNIQUE(concept_id, review). Two legitimate attempts at the same
       // concept in the same millisecond are not duplicates; the old constraint
       // made the atomic commit's log insert fail (or, after the OR IGNORE
-      // change, silently drop the second log). One-time consistent snapshot
-      // before the rebuild on existing data.
+      // change, silently drop the second log).
+      // On desktop the rebuild is owned by the Rust startup path
+      // (db::init_database_sync → learner_commit::migrate_review_logs_on_conn,
+      // ONE real connection, before this pool opens) — handing the pooled JS
+      // adapter cross-statement BEGIN/COMMIT silently no-ops the transaction.
+      // Other platforms run the equivalent through their (single-connection)
+      // adapter here.
       try {
-        const legacyConstraint = await database.select<{ n: number }>(
-          "SELECT COUNT(*) AS n FROM pragma_index_list('learner_review_logs') WHERE origin = 'u'",
-        );
-        if ((legacyConstraint[0]?.n ?? 0) > 0) {
-          const platform = getPlatformService();
-          const backupPath = platform.isDesktop
-            ? await getDatabaseFilePath(`${DB_FILENAME}.bak-learner-v3`)
-            : null;
-          await migrateLearnerReviewLogsIdentity(database, { backupFilePath: backupPath });
+        const platform = getPlatformService();
+        if (!platform.isDesktop) {
+          const legacyConstraint = await database.select<{ n: number }>(
+            "SELECT COUNT(*) AS n FROM pragma_index_list('learner_review_logs') WHERE origin = 'u'",
+          );
+          if ((legacyConstraint[0]?.n ?? 0) > 0) {
+            await migrateLearnerReviewLogsIdentity(database);
+          }
         }
-      } catch {
-        // The migration is load-bearing but must not hard-block startup on an
-        // unexpected pragma/adapter failure; the atomic commit fails LOUDLY on
-        // an un-migrated table instead of silently dropping logs.
+      } catch (error) {
+        // The migration is load-bearing but must not hard-block startup; the
+        // learner commit fails LOUDLY on an un-migrated table instead of
+        // silently dropping logs. Surface the failure — never swallow it.
+        console.error("[db] learner review-log identity migration failed:", error);
       }
       // Evidence confirmation metadata (iter-1): the learner's vouch for a
       // judged verdict is recorded WITHOUT a second BKT/FSRS apply.

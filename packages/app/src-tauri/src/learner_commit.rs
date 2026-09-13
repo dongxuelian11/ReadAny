@@ -194,6 +194,88 @@ pub fn learner_commit(app: AppHandle, request: CommitRequest) -> Result<CommitOk
     commit_on_conn(&mut conn, &request)
 }
 
+/// PR32-followup (F03): rebuild learner_review_logs without the legacy
+/// UNIQUE(concept_id, review) table constraint. Called from startup
+/// (db::init_database_sync) on ONE real connection — the SQL plugin pool must
+/// never be handed cross-statement BEGIN/COMMIT (each pooled execute can land
+/// on a different connection, which silently no-ops the transaction).
+/// Best-effort backup first; returns whether a rebuild ran.
+pub fn migrate_review_logs_on_conn(
+    conn: &mut Connection,
+    backup_path: Option<&str>,
+) -> Result<bool, String> {
+    let legacy: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_index_list('learner_review_logs') WHERE origin = 'u'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    if legacy == 0 {
+        return Ok(false);
+    }
+    if let Some(path) = backup_path {
+        // Best-effort consistent snapshot BEFORE the rebuild; VACUUM cannot
+        // run inside a transaction, and a pre-existing snapshot file makes
+        // this fail harmlessly.
+        let escaped = path.replace('\'', "''");
+        let _ = conn.execute(format!("VACUUM INTO '{}'", escaped).as_str(), []);
+    }
+    let tx = conn
+        .transaction()
+        .map_err(|e| format!("failed to begin transaction: {}", e))?;
+    // A scratch table left by an interrupted earlier attempt is dropped first;
+    // at that point the real table is untouched.
+    tx.execute("DROP TABLE IF EXISTS learner_review_logs_identity", [])
+        .map_err(|e| e.to_string())?;
+    tx.execute(
+        "CREATE TABLE learner_review_logs_identity (
+           id INTEGER PRIMARY KEY AUTOINCREMENT,
+           concept_id TEXT NOT NULL,
+           rating INTEGER NOT NULL,
+           state INTEGER NOT NULL,
+           due INTEGER NOT NULL,
+           stability REAL NOT NULL,
+           difficulty REAL NOT NULL,
+           scheduled_days INTEGER NOT NULL,
+           learning_steps INTEGER NOT NULL,
+           review INTEGER NOT NULL,
+           event_id TEXT
+         )",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+    tx.execute(
+        "INSERT INTO learner_review_logs_identity
+           (id, concept_id, rating, state, due, stability, difficulty,
+            scheduled_days, learning_steps, review, event_id)
+         SELECT id, concept_id, rating, state, due, stability, difficulty,
+                scheduled_days, learning_steps, review, event_id
+         FROM learner_review_logs",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+    tx.execute("DROP TABLE learner_review_logs", [])
+        .map_err(|e| e.to_string())?;
+    tx.execute(
+        "ALTER TABLE learner_review_logs_identity RENAME TO learner_review_logs",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| format!("failed to commit: {}", e))?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_learner_review_logs_concept ON learner_review_logs(concept_id, review)",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_learner_review_logs_event ON learner_review_logs(event_id) WHERE event_id IS NOT NULL",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
 /// The whole commit against ONE connection (testable with in-memory SQLite).
 pub fn commit_on_conn(conn: &mut Connection, request: &CommitRequest) -> Result<CommitOk, String> {
     let tx = conn
@@ -826,6 +908,90 @@ mod tests {
         });
         let err = commit_on_conn(&mut conn, &req).unwrap_err();
         assert_eq!(err, "__conflict__", "a genuinely different payload stays a conflict");
+    }
+
+    #[test]
+    fn review_log_identity_migration_preserves_rows_and_is_one_shot() {
+        // Legacy on-disk shape with the table-level UNIQUE constraint.
+        let tmp = std::env::temp_dir().join(format!(
+            "readany-log-migrate-{}-{}.db",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        {
+            let conn = Connection::open(&tmp).expect("open");
+            conn.execute_batch(
+                "CREATE TABLE learner_review_logs (
+                   id INTEGER PRIMARY KEY AUTOINCREMENT, concept_id TEXT NOT NULL, rating INTEGER NOT NULL,
+                   state INTEGER NOT NULL, due INTEGER NOT NULL, stability REAL NOT NULL,
+                   difficulty REAL NOT NULL, scheduled_days INTEGER NOT NULL, learning_steps INTEGER NOT NULL,
+                   review INTEGER NOT NULL, event_id TEXT, UNIQUE(concept_id, review));",
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO learner_review_logs (concept_id, rating, state, due, stability, difficulty, scheduled_days, learning_steps, review, event_id) VALUES ('c1',3,0,1000,1.0,5.0,1,0,1000,NULL)",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO learner_review_logs (concept_id, rating, state, due, stability, difficulty, scheduled_days, learning_steps, review, event_id) VALUES ('c1',3,0,2000,2.0,5.0,1,0,2000,'ev-2')",
+                [],
+            )
+            .unwrap();
+        }
+        {
+            let mut conn = Connection::open(&tmp).expect("reopen");
+            // An interrupted earlier attempt left a scratch table: must not block.
+            conn.execute("CREATE TABLE learner_review_logs_identity (id INTEGER PRIMARY KEY)", [])
+                .unwrap();
+            let rebuilt = migrate_review_logs_on_conn(&mut conn, None).expect("migrate");
+            assert!(rebuilt);
+            let rows: i64 = conn
+                .query_row("SELECT COUNT(*) FROM learner_review_logs", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(rows, 2, "every existing log row survives the rebuild");
+            let ids: Vec<i64> = conn
+                .prepare("SELECT id FROM learner_review_logs ORDER BY id")
+                .unwrap()
+                .query_map([], |r| r.get(0))
+                .unwrap()
+                .map(|r| r.unwrap())
+                .collect();
+            assert_eq!(ids, vec![1, 2], "legacy ids preserved");
+            let legacy: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM pragma_index_list('learner_review_logs') WHERE origin = 'u'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(legacy, 0, "the time-unique constraint is gone");
+            let event_index: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_learner_review_logs_event'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(event_index, 1);
+            // Two legitimate same-instant attempts BOTH insert now.
+            conn.execute(
+                "INSERT INTO learner_review_logs (concept_id, rating, state, due, stability, difficulty, scheduled_days, learning_steps, review, event_id) VALUES ('c1',3,0,3000,3.0,5.0,1,0,3000,'ev-3a')",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO learner_review_logs (concept_id, rating, state, due, stability, difficulty, scheduled_days, learning_steps, review, event_id) VALUES ('c1',3,0,3000,3.0,5.0,1,0,3000,'ev-3b')",
+                [],
+            )
+            .unwrap();
+            // Second run is a no-op.
+            assert!(!migrate_review_logs_on_conn(&mut conn, None).expect("second run"));
+        }
+        let _ = std::fs::remove_file(&tmp);
     }
 
     /// The REAL TypeScript engine's first-answer atomic request, captured from
