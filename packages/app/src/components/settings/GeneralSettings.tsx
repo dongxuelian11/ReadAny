@@ -1,9 +1,3 @@
-import {
-  clearDesktopLibraryRoot,
-  getDefaultDesktopLibraryRoot,
-  getDesktopLibraryRoot,
-  migrateDesktopLibraryRoot,
-} from "@/lib/storage/desktop-library-root";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -13,6 +7,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  clearDesktopLibraryRoot,
+  getDefaultDesktopLibraryRoot,
+  getDesktopLibraryRoot,
+  migrateDesktopLibraryRoot,
+} from "@/lib/storage/desktop-library-root";
+import { useSettingsStore } from "@readany/core/stores/settings-store";
 import { Coffee, FolderOpen, HardDrive, Monitor, Moon, RotateCcw, Sun } from "lucide-react";
 /**
  * GeneralSettings — app-level settings
@@ -32,6 +33,8 @@ const THEME_CONFIG: Record<ThemeMode, { icon: typeof Sun; labelKey: string }> = 
 
 export function GeneralSettings() {
   const { t, i18n } = useTranslation();
+  const learningLanguage = useSettingsStore((s) => s.learningLanguage);
+  const setLearningLanguage = useSettingsStore((s) => s.setLearningLanguage);
   const [theme, setThemeState] = useState<ThemeMode>("dark");
   const [currentLibraryRoot, setCurrentLibraryRoot] = useState("");
   const [defaultLibraryRoot, setDefaultLibraryRoot] = useState("");
@@ -236,6 +239,30 @@ export function GeneralSettings() {
             </SelectContent>
           </Select>
         </div>
+
+        {/* Learning language — the language teaching/quizzes/feedback are
+            written in, independent of the book's own language. */}
+        <div className="mt-4 flex items-center justify-between border-t border-border/40 pt-4">
+          <div>
+            <span className="text-sm text-foreground">{t("settings.learningLanguage")}</span>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t("settings.learningLanguageDesc")}
+            </p>
+          </div>
+          <Select
+            value={learningLanguage || "auto"}
+            onValueChange={(lang) => setLearningLanguage(lang)}
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="zh-CN">简体中文</SelectItem>
+              <SelectItem value="en">English</SelectItem>
+              <SelectItem value="auto">{t("settings.learningLanguageAuto")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </section>
 
       <section className="rounded-lg bg-muted/60 p-4">
@@ -244,9 +271,7 @@ export function GeneralSettings() {
             <HardDrive className="h-4 w-4" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-sm font-medium text-foreground">
-              {t("settings.storageLocation")}
-            </h2>
+            <h2 className="text-sm font-medium text-foreground">{t("settings.storageLocation")}</h2>
             <p className="mt-1 text-xs text-muted-foreground">
               {t("settings.storageLocationDesc")}
             </p>
@@ -271,7 +296,11 @@ export function GeneralSettings() {
                 onChange={(e) => setTargetLibraryRoot(e.target.value)}
                 placeholder={t("settings.storageTargetPath")}
               />
-              <Button variant="outline" onClick={handleChooseLibraryFolder} disabled={migratingLibrary}>
+              <Button
+                variant="outline"
+                onClick={handleChooseLibraryFolder}
+                disabled={migratingLibrary}
+              >
                 <FolderOpen className="h-4 w-4" />
                 {t("settings.storageChooseFolder")}
               </Button>

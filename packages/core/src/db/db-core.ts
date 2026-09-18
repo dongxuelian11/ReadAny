@@ -377,6 +377,24 @@ export async function initDatabase(): Promise<void> {
     )
   `);
 
+      // Catalog one-click acquisition (LIB-2): one task per catalog edition.
+      // 'downloading' rows found at startup are reset to 'failed' so a restart
+      // never shows a phantom "ready" state and can safely re-download.
+      await database.execute(`
+    CREATE TABLE IF NOT EXISTS catalog_acquire_tasks (
+      catalog_edition_id TEXT PRIMARY KEY,
+      status TEXT NOT NULL DEFAULT 'downloading',
+      book_id TEXT,
+      resource_url TEXT,
+      expected_sha256 TEXT,
+      bytes_downloaded INTEGER NOT NULL DEFAULT 0,
+      total_bytes INTEGER,
+      error TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  `);
+
       await database.execute(`
     CREATE TABLE IF NOT EXISTS highlights (
       id TEXT PRIMARY KEY,

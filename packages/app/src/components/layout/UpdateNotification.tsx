@@ -3,7 +3,14 @@
  * Auto-checks on mount (with a short delay), then shows a persistent notification
  * until the user dismisses or clicks update.
  */
-import { checkForUpdate, downloadAndInstall, getDownloadProgress, relaunchApp, type UpdateInfo } from "@/lib/updater";
+import {
+  type UpdateInfo,
+  checkForUpdate,
+  downloadAndInstall,
+  getDownloadProgress,
+  isAutoUpdateEnabled,
+  relaunchApp,
+} from "@/lib/updater";
 import { ArrowDownToLine, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -17,6 +24,9 @@ export function UpdateNotification() {
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
+    // Manual update mode: never auto-check, never show an install toast —
+    // there is nothing verified to install automatically yet.
+    if (!isAutoUpdateEnabled()) return;
     // Check for updates 5 seconds after app starts (don't block startup)
     const timer = setTimeout(async () => {
       try {
@@ -48,7 +58,7 @@ export function UpdateNotification() {
     await relaunchApp();
   }, []);
 
-  if (!update || dismissed) return null;
+  if (!update || dismissed || !isAutoUpdateEnabled()) return null;
 
   return (
     <div className="fixed bottom-4 right-4 z-[9999] w-72 animate-in slide-in-from-bottom-4 fade-in duration-300">

@@ -6,7 +6,7 @@
 
 import { useCallback, useState } from "react";
 import { useSettingsStore } from "../stores/settings-store";
-import { getFromCache, storeInCache } from "../translation/cache";
+import { getFromCache, storeInCache, translationCacheVariant } from "../translation/cache";
 import { aiTranslate, deeplTranslate, microsoftTranslate } from "../translation/providers";
 import type { AIConfig } from "../types";
 import type { TranslationConfig, TranslationTargetLang } from "../types/translation";
@@ -43,12 +43,25 @@ export function useTranslator(options: UseTranslatorOptions = {}) {
 
       const targetLanguage = targetLang || translationConfig.targetLang;
       const providerId = translationConfig.provider.id;
+      const aiEndpointId = translationConfig.provider.endpointId || aiConfig.activeEndpointId;
+      const aiEndpoint = aiConfig.endpoints.find((e) => e.id === aiEndpointId);
+      const cacheVariant = translationCacheVariant(
+        providerId,
+        providerId === "ai" ? translationConfig.provider.model || aiConfig.activeModel : undefined,
+        providerId === "ai" ? aiEndpoint?.baseUrl : undefined,
+      );
 
       const cachedResults: string[] = [];
       const needsTranslation: { index: number; text: string }[] = [];
       await Promise.all(
         textsToTranslate.map(async (text, index) => {
-          const cached = await getFromCache(text, sourceLang, targetLanguage, providerId);
+          const cached = await getFromCache(
+            text,
+            sourceLang,
+            targetLanguage,
+            providerId,
+            cacheVariant,
+          );
           if (cached) {
             cachedResults[index] = cached;
           } else {
@@ -110,7 +123,14 @@ export function useTranslator(options: UseTranslatorOptions = {}) {
         await Promise.all(
           needsTranslation.map(async ({ text }, i) => {
             if (translatedTexts[i]) {
-              await storeInCache(text, translatedTexts[i], sourceLang, targetLanguage, providerId);
+              await storeInCache(
+                text,
+                translatedTexts[i],
+                sourceLang,
+                targetLanguage,
+                providerId,
+                cacheVariant,
+              );
             }
           }),
         );

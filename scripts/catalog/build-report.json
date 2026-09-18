@@ -1,0 +1,95 @@
+{
+  "builtAt": "2026-09-13T07:30:38.498Z",
+  "finishedAt": "2026-09-13T08:49:45.077Z",
+  "catalogSchemaVersion": 1,
+  "counts": {
+    "totalEditions": 3873,
+    "distinctWorkKeys": 3801,
+    "byProvider": {
+      "curated": 2,
+      "gutenberg": 1994,
+      "otl": 1877
+    },
+    "byAvailability": {
+      "bundled": 14,
+      "metadata-only": 2,
+      "online": 3857
+    },
+    "bySubject": {
+      "math": 243,
+      "stats-data": 98,
+      "cs-se": 161,
+      "ai": 22,
+      "physics-astro": 187,
+      "chem-materials": 108,
+      "life-health": 407,
+      "earth-env-agri": 221,
+      "engineering": 245,
+      "econ-finance": 219,
+      "psych-cognitive": 149,
+      "education": 246,
+      "history-society-law": 934,
+      "philosophy-religion-logic": 426,
+      "lang-lit": 1314,
+      "art-design-media": 414
+    },
+    "byLanguageTop": [
+      {
+        "language": "en",
+        "n": 3205
+      },
+      {
+        "language": "zh",
+        "n": 437
+      },
+      {
+        "language": "es",
+        "n": 116
+      },
+      {
+        "language": "fr",
+        "n": 39
+      },
+      {
+        "language": "de",
+        "n": 31
+      },
+      {
+        "language": "fi",
+        "n": 11
+      },
+      {
+        "language": "nl",
+        "n": 6
+      },
+      {
+        "language": "it",
+        "n": 5
+      },
+      {
+        "language": "pl",
+        "n": 3
+      },
+      {
+        "language": "ru",
+        "n": 2
+      }
+    ]
+  },
+  "sources": {
+    "gutendex": {
+      "requests": 84,
+      "pages": {
+        "popular": 20,
+        "zh": 14,
+        "topics": 49
+      }
+    },
+    "otl": {
+      "records": 1877
+    },
+    "curated": {
+      "entries": 14
+    }
+  }
+}
