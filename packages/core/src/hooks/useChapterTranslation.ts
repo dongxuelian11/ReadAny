@@ -286,11 +286,15 @@ export function useChapterTranslation(options: UseChapterTranslationOptions) {
         const paragraphs = await getParagraphsRef.current();
         if (cancelled) return;
         const providerId = translationConfig.provider.id;
+        const aiEndpoint = aiConfig.endpoints.find(
+          (e) => e.id === (translationConfig.provider.endpointId || aiConfig.activeEndpointId),
+        );
         const cacheVariant = translationCacheVariant(
           providerId,
           providerId === "ai"
             ? translationConfig.provider.model || aiConfig.activeModel
             : undefined,
+          providerId === "ai" ? aiEndpoint?.baseUrl : undefined,
         );
         const results: ChapterTranslationResult[] = [];
 

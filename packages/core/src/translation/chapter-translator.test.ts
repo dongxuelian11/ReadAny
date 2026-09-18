@@ -115,7 +115,50 @@ describe("translateChapter failure semantics", () => {
     await translateChapter(baseOptions(paras("variant text one")));
     const keys = [...kv.keys()];
     expect(keys).toHaveLength(1);
-    expect(keys[0]).toContain("ai_mtest-model_p2");
+    expect(keys[0]).toContain("ai_mtest-model_p3");
     expect(storeSpy).toHaveBeenCalled();
+  });
+
+  it("rejects a provider batch that is shorter than the request (no blank successes)", async () => {
+    const paragraphs = paras("alpha text", "beta text", "gamma text");
+    const { aiTranslateBatch } = await import("./providers");
+    vi.mocked(aiTranslateBatch).mockImplementation(async (texts: string[]) =>
+      // provider silently drops the last entry — previously the missing tail
+      // was stored as "" and counted as translated progress
+      texts
+        .slice(0, texts.length - 1)
+        .map((t) => `译:${t}`),
+    );
+    const progressUpdates: Array<{ translatedChars: number; totalChars: number }> = [];
+    const errors: Array<{ paragraphIds: string[] }> = [];
+
+    const results = await translateChapter({
+      ...baseOptions(paragraphs),
+      charsPerChunk: 1000,
+      onProgress: (p) => progressUpdates.push(p),
+      onChunkError: (info) => errors.push(info),
+    });
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0].paragraphIds).toEqual(["p0", "p1", "p2"]);
+    const final = progressUpdates[progressUpdates.length - 1];
+    expect(final.translatedChars).toBe(0);
+    expect(results.every((r) => r.translatedText === "")).toBe(true);
+  });
+
+  it("rejects whitespace-only provider entries as failed chunks", async () => {
+    const paragraphs = paras("delta text");
+    const { aiTranslateBatch } = await import("./providers");
+    vi.mocked(aiTranslateBatch).mockImplementation(async (texts: string[]) =>
+      texts.map(() => "   "),
+    );
+    const errors: Array<{ paragraphIds: string[] }> = [];
+    const results = await translateChapter({
+      ...baseOptions(paragraphs),
+      charsPerChunk: 1000,
+      onChunkError: (info) => errors.push(info),
+    });
+    expect(errors).toHaveLength(1);
+    expect(results.every((r) => r.translatedText === "")).toBe(true);
   });
 });

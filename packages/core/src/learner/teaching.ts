@@ -20,6 +20,36 @@ export type ChapterTextProvider = (conceptId: string) => Promise<string>;
 
 export const TEACHING_SOURCE_TEXT_CAP = 12000;
 
+/**
+ * The language teaching output should be written in — independent of the
+ * chapter text's language. "auto" (or undefined) keeps the legacy behavior of
+ * following the chapter text; an explicit tag (e.g. "zh-CN") makes the
+ * explanation, key points, worked example, question, options, and feedback be
+ * written in that language even for English source books.
+ */
+export type LearningLanguage = string;
+
+const LEARNING_LANGUAGE_NAMES: Record<string, string> = {
+  zh: "简体中文",
+  "zh-CN": "简体中文",
+  "zh-TW": "繁體中文",
+  en: "English",
+  ja: "日本語",
+  ko: "한국어",
+  fr: "Français",
+  es: "Español",
+  de: "Deutsch",
+};
+
+export function learningLanguageName(tag: LearningLanguage): string {
+  return LEARNING_LANGUAGE_NAMES[tag] || tag;
+}
+
+/** True when teaching output should follow the chapter text's own language. */
+export function followsSourceLanguage(lang: LearningLanguage | undefined): boolean {
+  return !lang || lang === "auto";
+}
+
 export interface TeachingContent {
   explanation: string;
   keyPoints: string[];
@@ -59,6 +89,10 @@ export function buildTeachingPrompt(params: {
   chapterTitle: string;
   chapterText: string;
   action: "learn" | "review";
+  learningLanguage?: LearningLanguage;
+  /** Short honest note about what the learner already knows for this concept
+   * (mastery level / prior wrong attempts). Never presented as a diagnosis. */
+  learnerContext?: string;
 }): { system: string; user: string } {
   const system = [
     "You are a patient tutor teaching ONE chapter of a book to a single learner.",
@@ -67,9 +101,17 @@ export function buildTeachingPrompt(params: {
       : "Teach the chapter from scratch, assuming no prior knowledge of it.",
     "Ground EVERY claim in the chapter text provided. If the text does not cover something, do not bring it in.",
     "Never copy the chapter text verbatim — extract and explain. Keep the author's exact terminology.",
+    ...(followsSourceLanguage(params.learningLanguage)
+      ? []
+      : [
+          `Teaching output language: ${learningLanguageName(params.learningLanguage as LearningLanguage)} (${params.learningLanguage}).`,
+          `Write explanation, keyPoints, workedExample, check.prompt, check.options, and check.explanation in ${learningLanguageName(params.learningLanguage as LearningLanguage)} — regardless of the chapter text's language.`,
+          "The learner is NOT assumed to read the chapter text's language; weak English does not mean weak math or programming.",
+          "On first use, keep the author's key technical term in its original language in parentheses, e.g. 「均值回归（mean reversion）」; keep formulas, variable names, code identifiers, and units exactly as in the source.",
+        ]),
     "Return STRICT JSON only, no prose, with this shape:",
     "{",
-    '  "explanation": "120-350 words teaching the core of the chapter, in the same language as the chapter text",',
+    `  "explanation": "120-350 words teaching the core of the chapter${followsSourceLanguage(params.learningLanguage) ? ", in the same language as the chapter text" : `, in ${learningLanguageName(params.learningLanguage as LearningLanguage)}`}",`,
     '  "keyPoints": ["2-5 terse takeaways"],',
     '  "workedExample": "one concrete worked example, or null",',
     '  "check": {',
@@ -83,6 +125,7 @@ export function buildTeachingPrompt(params: {
   const user = [
     `Book: ${params.bookTitle}`,
     `Chapter: ${params.chapterTitle}`,
+    ...(params.learnerContext ? [`Learner context: ${params.learnerContext}`] : []),
     "",
     "Chapter text:",
     params.chapterText.slice(0, TEACHING_SOURCE_TEXT_CAP),
@@ -138,12 +181,16 @@ export async function generateTeachingContent(params: {
   step: TeachingStep;
   chapterText: string;
   llm: TeachingLlmClient;
+  learningLanguage?: LearningLanguage;
+  learnerContext?: string;
 }): Promise<TeachingContent> {
   const prompt = buildTeachingPrompt({
     bookTitle: params.bookTitle,
     chapterTitle: params.step.title,
     chapterText: params.chapterText,
     action: params.step.action,
+    learningLanguage: params.learningLanguage,
+    learnerContext: params.learnerContext,
   });
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt += 1) {

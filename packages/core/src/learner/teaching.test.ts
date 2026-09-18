@@ -94,6 +94,43 @@ describe("teaching prompt and validation", () => {
     expect(prompt.user).toContain("Chapter text:");
   });
 
+  it("keeps the legacy source-language behavior when learningLanguage is auto/absent", () => {
+    const prompt = buildTeachingPrompt({
+      bookTitle: "B",
+      chapterTitle: "C",
+      chapterText: "text",
+      action: "learn",
+    });
+    expect(prompt.system).toContain("in the same language as the chapter text");
+  });
+
+  it("writes teaching output in the independent learning language (CN01)", () => {
+    const prompt = buildTeachingPrompt({
+      bookTitle: "An English Book",
+      chapterTitle: "Chapter 1",
+      chapterText: "English source text about volatility.",
+      action: "learn",
+      learningLanguage: "zh-CN",
+    });
+    // The default "same language as the chapter text" instruction is replaced:
+    expect(prompt.system).not.toContain("in the same language as the chapter text");
+    expect(prompt.system).toContain("简体中文");
+    expect(prompt.system).toContain("regardless of the chapter text's language");
+    // original technical terms are preserved inline on first use
+    expect(prompt.system).toContain("mean reversion");
+  });
+
+  it("passes learner context through to the user message", () => {
+    const prompt = buildTeachingPrompt({
+      bookTitle: "B",
+      chapterTitle: "C",
+      chapterText: "text",
+      action: "learn",
+      learnerContext: "first exposure to this concept — start from zero domain knowledge",
+    });
+    expect(prompt.user).toContain("Learner context: first exposure");
+  });
+
   it("validates the draft fail-closed", () => {
     expect(() =>
       validateTeachingContent({
@@ -215,14 +252,12 @@ describe("teaching session lifecycle", () => {
       ...deps,
       teachings: {
         ...deps.teachings,
-        put: async (arg: Parameters<typeof deps.teachings.put>[0]) => {
+        put: async (_arg: Parameters<typeof deps.teachings.put>[0]) => {
           throw new Error("session write failed");
         },
       },
     };
-    await expect(answerCurrentStep(brokenDeps, session, 1)).rejects.toThrow(
-      "session write failed",
-    );
+    await expect(answerCurrentStep(brokenDeps, session, 1)).rejects.toThrow("session write failed");
     const crashed = await deps.teachings.get(session.id);
     expect(crashed?.steps[0].answered).toBe(false);
     // But the evidence + BKT + FSRS already landed (write lock released).

@@ -8,12 +8,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  type UpdateInfo,
   checkForUpdate,
   downloadAndInstall,
-  getAvailableUpdate,
   getDownloadProgress,
   getErrorMessage,
   getUpdateStatus,
+  isAutoUpdateEnabled,
   relaunchApp,
   resetStatus,
   subscribeToUpdates,
@@ -37,6 +38,9 @@ import {
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+/** Short build SHA injected by Vite at build time (falls back in dev). */
+declare const __BUILD_SHA__: string;
+
 const TECH_STACK = [
   { name: "Tauri", descKey: "settings.techStackTauri", icon: Shield },
   { name: "React", descKey: "settings.techStackReact", icon: Code2 },
@@ -48,8 +52,9 @@ type DialogType = "none" | "updateAvailable" | "upToDate" | "error";
 
 export function AboutSettings() {
   const { t } = useTranslation();
+  const autoUpdate = isAutoUpdateEnabled();
   const [status, setStatus] = useState(getUpdateStatus());
-  const [update, setUpdate] = useState(getAvailableUpdate());
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const [progress, setProgress] = useState(getDownloadProgress());
   const [error, setError] = useState(getErrorMessage());
   const [dialogType, setDialogType] = useState<DialogType>("none");
@@ -136,17 +141,47 @@ export function AboutSettings() {
           <div className="flex items-center gap-2">
             <span className="font-mono text-sm font-medium text-foreground">
               {appVersion || "..."}
+              {!autoUpdate && (
+                <span className="ml-2 text-xs text-muted-foreground/80">
+                  {typeof __BUILD_SHA__ === "string" ? __BUILD_SHA__ : ""}
+                </span>
+              )}
             </span>
-            <button
-              onClick={handleCheckUpdate}
-              disabled={status === "checking" || status === "downloading"}
-              className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
-              title={t("settings.checkUpdate")}
-            >
-              <RefreshCw className={`h-4 w-4 ${status === "checking" ? "animate-spin" : ""}`} />
-            </button>
+            {autoUpdate && (
+              <button
+                onClick={handleCheckUpdate}
+                disabled={status === "checking" || status === "downloading"}
+                className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+                title={t("settings.checkUpdate")}
+              >
+                <RefreshCw className={`h-4 w-4 ${status === "checking" ? "animate-spin" : ""}`} />
+              </button>
+            )}
           </div>
         </div>
+        {!autoUpdate && (
+          <div className="mt-3 space-y-2 border-t border-border/50 pt-3">
+            <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+              <Shield className="h-3.5 w-3.5 text-primary" />
+              {t("settings.updateModeManualTitle")}
+            </p>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {t("settings.updateModeManualDesc")}
+            </p>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {t("settings.updateModeManualHow")}
+            </p>
+            <a
+              href="https://github.com/dongxuelian11/ReadAny/releases"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-foreground hover:text-background"
+            >
+              <Download className="h-3.5 w-3.5" />
+              {t("settings.updateModeManualReleases")}
+            </a>
+          </div>
+        )}
       </div>
 
       {/* Download Progress */}
@@ -266,20 +301,25 @@ export function AboutSettings() {
       {/* Links */}
       <div className="w-full max-w-md space-y-2">
         <a
-          href="https://github.com/codedogQBY/ReadAny"
+          href="https://github.com/dongxuelian11/ReadAny"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center justify-between rounded-lg bg-muted/60 p-3 transition-colors hover:bg-muted"
         >
           <div className="flex items-center gap-3">
             <Github className="h-5 w-5 text-muted-foreground" />
-            <span className="text-sm font-medium text-foreground">GitHub</span>
+            <div>
+              <span className="text-sm font-medium text-foreground">GitHub</span>
+              <span className="ml-2 text-xs text-muted-foreground">
+                {t("settings.forkIdentity")}
+              </span>
+            </div>
           </div>
           <ExternalLink className="h-4 w-4 text-muted-foreground" />
         </a>
 
         <a
-          href="https://github.com/codedogQBY/ReadAny/issues"
+          href="https://github.com/dongxuelian11/ReadAny/issues"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center justify-between rounded-lg bg-muted/60 p-3 transition-colors hover:bg-muted"
@@ -295,6 +335,7 @@ export function AboutSettings() {
       {/* Copyright */}
       <div className="mt-8 text-center text-xs text-muted-foreground/60">
         <p>© 2026 codedogQBY. All rights reserved.</p>
+        <p className="mt-1">ReadAny 社区增强版（fork）· 原版作者 codedogQBY</p>
         <p className="mt-1">{t("settings.license")}</p>
       </div>
     </div>

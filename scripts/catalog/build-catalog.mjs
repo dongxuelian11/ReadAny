@@ -365,14 +365,26 @@ async function fetchOtlAll() {
 }
 
 function curatedReleaseRow(entry) {
-  const asset = entry.source.asset;
-  const ext = asset.toLowerCase().endsWith(".pdf") ? "pdf" : "epub";
-  const file = `${entry.catalogEditionId.replace(/^curated:/, "")}.${ext}`;
-  const releaseUrl = `https://github.com/${entry.source.repo}/releases/tag/${entry.source.tag}`;
+  const isBuildOutput = entry.source?.kind === "build-output";
+  const ext = isBuildOutput
+    ? entry.source.path.toLowerCase().endsWith(".pdf")
+      ? "pdf"
+      : "epub"
+    : entry.source.asset.toLowerCase().endsWith(".pdf")
+      ? "pdf"
+      : "epub";
+  const file = isBuildOutput
+    ? path.posix.basename(entry.source.path)
+    : `${entry.catalogEditionId.replace(/^curated:/, "")}.${ext}`;
+  const releaseUrl = isBuildOutput
+    ? (entry.landingUrl ?? `https://github.com/${entry.source.origin?.split("@")[0] ?? ""}`)
+    : `https://github.com/${entry.source.repo}/releases/tag/${entry.source.tag}`;
   const row = {
     catalog_edition_id: entry.catalogEditionId,
     provider_id: "curated",
-    provider_record_id: `${entry.source.repo}@${entry.source.tag}:${asset}`,
+    provider_record_id: isBuildOutput
+      ? (entry.source.origin ?? entry.source.path)
+      : `${entry.source.repo}@${entry.source.tag}:${entry.source.asset}`,
     work_key: normalizeCatalogText(entry.titleZh || entry.originalTitle),
     original_title: entry.originalTitle,
     title_zh: entry.titleZh ?? null,
@@ -388,7 +400,11 @@ function curatedReleaseRow(entry) {
     popularity: 0,
     resource_format: ext,
     resource_landing_url: entry.landingUrl ?? releaseUrl,
-    resource_download_url: `https://github.com/${entry.source.repo}/releases/download/${entry.source.tag}/${asset}`,
+    // build-output rows have no downloadable URL — build-seed copies them
+    // from the repo-local build output (entry.source.path).
+    resource_download_url: isBuildOutput
+      ? null
+      : `https://github.com/${entry.source.repo}/releases/download/${entry.source.tag}/${entry.source.asset}`,
     availability: "bundled",
     license_id: entry.licenseId,
     license_url: entry.licenseUrl ?? null,

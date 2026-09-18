@@ -50,6 +50,10 @@ __pycache__/
 # Pinned OSS audit checkouts (PR-003 learner-core audit)
 .audit/
 
+# Quant pack build cache (pinned notebook downloads) and build output
+scripts/quant/cache/
+scripts/quant/out/
+
 readese/*
 
 # Local WebDAV test server

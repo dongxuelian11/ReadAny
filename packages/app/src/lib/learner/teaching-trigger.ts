@@ -68,6 +68,7 @@ export async function createTeachingGenerationDeps(book: Book) {
     ...createSqliteLearnerStores(),
     llm,
     chapterText: chapterTextProvider(textByIndex),
+    learningLanguage: useSettingsStore.getState().learningLanguage,
   };
 }
 

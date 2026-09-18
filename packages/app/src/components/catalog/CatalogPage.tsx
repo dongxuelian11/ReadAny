@@ -34,6 +34,9 @@ import { useTranslation } from "react-i18next";
 
 const PAGE_SIZE = 40;
 
+/** Featured Chinese-first quant learning pack (bundled, opens instantly). */
+const QUANT_PACK_EDITION_ID = "curated:quant-for-beginners-zh";
+
 const AVAILABILITY_FILTERS: Array<{ id: CatalogAvailability | ""; labelKey: string }> = [
   { id: "", labelKey: "catalog.filterAll" },
   { id: "bundled", labelKey: "catalog.availability.bundled" },
@@ -71,6 +74,7 @@ export function CatalogPage() {
   const [detail, setDetail] = useState<CatalogEdition | null>(null);
   const [installingId, setInstallingId] = useState<string | null>(null);
   const [acquireTasks, setAcquireTasks] = useState<Record<string, CatalogAcquireTask>>({});
+  const [quantEdition, setQuantEdition] = useState<CatalogEdition | null>(null);
 
   // Acquire task states (one-click downloads) — pushes arrive from acquire.ts.
   useEffect(() => subscribeAcquireTasks(setAcquireTasks), []);
@@ -95,8 +99,12 @@ export function CatalogPage() {
     ensureCatalogSeeded()
       .then((res) => {
         setManifest(res.manifest);
-        return getCatalogStats();
+        // Featured Chinese quant learning pack (optional: absent in older seeds).
+        return getCatalogEdition(QUANT_PACK_EDITION_ID)
+          .then(setQuantEdition)
+          .catch(() => {});
       })
+      .then(() => getCatalogStats())
       .then(setStats)
       .catch((err) => {
         console.error("[catalog] seed failed:", err);
@@ -289,6 +297,35 @@ export function CatalogPage() {
 
       {/* Results */}
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+        {/* Featured quant entry — only on the unfiltered first page. */}
+        {quantEdition && page === 1 && !query && !subjectId && !availability && (
+          <div className="mb-3 flex flex-col gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 sm:flex-row sm:items-center">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                  {t("catalog.quantEntryBadge")}
+                </span>
+                <span className="truncate text-sm font-medium text-foreground">
+                  {quantEdition.titleZh || quantEdition.originalTitle}
+                </span>
+              </div>
+              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                {t("catalog.quantEntryDesc")}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              disabled={installingId === quantEdition.catalogEditionId}
+              onClick={() => void handleRead(quantEdition)}
+            >
+              {installingId === quantEdition.catalogEditionId ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                t("catalog.quantEntryAction")
+              )}
+            </Button>
+          </div>
+        )}
         {loading ? (
           <div className="flex h-32 items-center justify-center text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin" />

@@ -5,7 +5,7 @@
 // exact PR-004/005 path). Fail-closed throughout: unknown/duplicate answers,
 // inactive sessions, and step-generation failures never silently pass.
 
-import { applyEvidenceEventResult, SessionStaleError } from "./engine";
+import { SessionStaleError, applyEvidenceEventResult } from "./engine";
 export { SessionStaleError } from "./engine";
 import type { PersonalCurriculum } from "./goal";
 import type { LearnerConceptState } from "./goal";
@@ -37,6 +37,9 @@ export interface TeachingEngineDeps {
   atomic?: import("./commit").LearnerAtomicCommit;
   llm: TeachingLlmClient;
   chapterText: ChapterTextProvider;
+  /** Independent teaching output language (e.g. "zh-CN"); undefined/"auto"
+   * follows the chapter text's language. See teaching.ts. */
+  learningLanguage?: string;
 }
 
 export class TeachingStepFailedError extends Error {
@@ -66,9 +69,7 @@ export async function startTeachingSession(
     // Only a session of THIS book is superseded; a global active of another
     // book stays resumable.
     const superseded =
-      active && active.bookId === curriculum.bookId && active.status === "active"
-        ? active
-        : null;
+      active && active.bookId === curriculum.bookId && active.status === "active" ? active : null;
     if (superseded) {
       await deps.teachings.put({
         ...superseded,
@@ -138,6 +139,20 @@ export async function deliverCurrentStep(
   if (step.content) return session;
 
   const chapterText = await deps.chapterText(step.conceptId);
+  // Honest learner context for the prompt: mastery status and prior evidence
+  // for THIS concept (from the same read model the UI shows). English
+  // difficulty must never be read as zero domain ability.
+  let learnerContext: string | undefined;
+  try {
+    const [entry] = await getLearnerStateAt(deps, [step.conceptId]);
+    const row = entry?.state ?? null;
+    learnerContext =
+      row && row.evidenceCount > 0
+        ? `${row.evidenceCount} prior attempt(s) on this concept, mastery ${(row.mastery * 100).toFixed(0)}%, status ${row.status} — pitch depth accordingly`
+        : "first exposure to this concept — start from zero domain knowledge";
+  } catch {
+    learnerContext = undefined;
+  }
   let content: TeachingContent;
   try {
     content = await generateTeachingContent({
@@ -145,6 +160,8 @@ export async function deliverCurrentStep(
       step,
       chapterText,
       llm: deps.llm,
+      learningLanguage: deps.learningLanguage,
+      learnerContext,
     });
   } catch (error) {
     throw new TeachingStepFailedError(

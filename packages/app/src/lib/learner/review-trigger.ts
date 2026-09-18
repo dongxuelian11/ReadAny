@@ -6,19 +6,12 @@
 // persisted — a crash mid-review just leaves that item due; the evidence
 // itself is durable.
 
-import {
-  createSqliteEvidenceOutbox,
-  applyEvidenceEventResult,
-} from "@readany/core/learner";
-import type {
-  ConceptMastery,
-  TeachingContent,
-  TeachingStep,
-} from "@readany/core/learner";
+import { applyEvidenceEventResult, createSqliteEvidenceOutbox } from "@readany/core/learner";
+import type { ConceptMastery, TeachingContent, TeachingStep } from "@readany/core/learner";
 import { generateTeachingContent } from "@readany/core/learner";
 import type { Book } from "@readany/core/types";
-import { createLearnerEngineDeps } from "./trigger";
 import { createTeachingGenerationDeps } from "./teaching-trigger";
+import { createLearnerEngineDeps } from "./trigger";
 
 /** Upper bound of one review sitting: the flow is a bounded queue, not a
  * scheduling platform. */
@@ -50,6 +43,7 @@ export async function deliverReviewItem(
     step,
     chapterText: await deps.chapterText(conceptId),
     llm: deps.llm,
+    learningLanguage: deps.learningLanguage,
   });
 }
 

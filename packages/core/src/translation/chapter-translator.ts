@@ -116,7 +116,11 @@ export async function translateChapter(
   } = options;
 
   const providerId = config.provider.id;
-  const cacheVariant = translationCacheVariant(providerId, config.provider.model);
+  const cacheVariant = translationCacheVariant(
+    providerId,
+    config.provider.model,
+    config.provider.baseUrl,
+  );
 
   // Calculate total characters for progress
   const totalChars = paragraphs.reduce((sum, p) => sum + p.text.length, 0);
@@ -203,10 +207,17 @@ export async function translateChapter(
       console.error("[translateChapter] chunk error:", err);
       return false;
     }
-    if (translatedTexts.some((t) => !t)) {
-      // Provider returned fewer/blank entries — treat as a failed chunk so the
-      // paragraphs are retried instead of being recorded as blank successes.
-      console.warn("[translateChapter] chunk returned blank entries — treating as failed");
+    if (
+      !Array.isArray(translatedTexts) ||
+      translatedTexts.length !== texts.length ||
+      translatedTexts.some((t) => typeof t !== "string" || t.trim().length === 0)
+    ) {
+      // Provider returned fewer entries, blanks, or whitespace-only filler —
+      // treat as a failed chunk so the paragraphs are retried instead of being
+      // recorded as (partially) blank successes.
+      console.warn(
+        `[translateChapter] chunk returned ${Array.isArray(translatedTexts) ? translatedTexts.length : "non-array"} of ${texts.length} usable entries — treating as failed`,
+      );
       return false;
     }
 

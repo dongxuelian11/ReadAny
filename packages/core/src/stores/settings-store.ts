@@ -1,19 +1,25 @@
 import { create } from "zustand";
+import { getEndpointFetch } from "../ai/llm-provider";
+import { logAIEndpointDebug, summarizeDebugText } from "../ai/request-debug";
 import type { AIConfig, AIEndpoint, ReadSettings } from "../types";
 import type { TranslationConfig, TranslationTargetLang } from "../types/translation";
 import {
   buildProviderModelsUrl,
-  providerSupportsExactRequestUrl,
   providerRequiresApiKey,
+  providerSupportsExactRequestUrl,
 } from "../utils";
-import { logAIEndpointDebug, summarizeDebugText } from "../ai/request-debug";
-import { getEndpointFetch } from "../ai/llm-provider";
 import { withPersist } from "./persist";
 
 export interface SettingsState {
   readSettings: ReadSettings;
   translationConfig: TranslationConfig;
   aiConfig: AIConfig;
+  /**
+   * Independent teaching output language ("auto" follows the book's language).
+   * Defaults to zh-CN so Chinese learners get Chinese explanations, quizzes,
+   * and feedback from English source books without touching their UI language.
+   */
+  learningLanguage: string;
   settingsUpdatedAt: number;
   hasCompletedOnboarding: boolean;
   showOnboardingGuide: boolean;
@@ -40,6 +46,7 @@ export interface SettingsState {
   fetchModels: (endpointId: string) => Promise<string[]>;
 
   setTranslationLang: (lang: TranslationTargetLang) => void;
+  setLearningLanguage: (lang: string) => void;
   resetToDefaults: () => void;
 }
 
@@ -64,6 +71,8 @@ const defaultTranslationConfig: TranslationConfig = {
   provider: { id: "microsoft", name: "微软翻译 (免费)" },
   targetLang: "zh-CN",
 };
+
+const defaultLearningLanguage = "zh-CN";
 
 const defaultEndpoint: AIEndpoint = {
   id: "default",
@@ -348,9 +357,7 @@ async function fetchLMStudioModels(endpoint: AIEndpoint): Promise<string[]> {
   const endpointFetch = getEndpointFetch(endpoint);
   const response = await endpointFetch(requestUrl);
   if (!response.ok) {
-    throw new Error(
-      `Failed to fetch LM Studio models: ${response.status} ${response.statusText}`,
-    );
+    throw new Error(`Failed to fetch LM Studio models: ${response.status} ${response.statusText}`);
   }
   const data = await response.json();
   return (data.data || [])
@@ -359,143 +366,156 @@ async function fetchLMStudioModels(endpoint: AIEndpoint): Promise<string[]> {
 }
 
 export const useSettingsStore = create<SettingsState>()(
-  withPersist("settings", (set, get, _api) => ({
-    readSettings: defaultReadSettings,
-    translationConfig: defaultTranslationConfig,
-    aiConfig: defaultAIConfig,
-    settingsUpdatedAt: 0,
-    hasCompletedOnboarding: false,
-    showOnboardingGuide: true,
-    _hasHydrated: false,
+  withPersist(
+    "settings",
+    (set, get, _api) => ({
+      readSettings: defaultReadSettings,
+      translationConfig: defaultTranslationConfig,
+      aiConfig: defaultAIConfig,
+      learningLanguage: defaultLearningLanguage,
+      settingsUpdatedAt: 0,
+      hasCompletedOnboarding: false,
+      showOnboardingGuide: true,
+      _hasHydrated: false,
 
-    completeOnboarding: () => set({ hasCompletedOnboarding: true }),
-    setShowOnboardingGuide: (show: boolean) => set({ showOnboardingGuide: show }),
+      completeOnboarding: () => set({ hasCompletedOnboarding: true }),
+      setShowOnboardingGuide: (show: boolean) => set({ showOnboardingGuide: show }),
 
-    updateReadSettings: (updates) =>
-      set((state) => ({
-        readSettings: { ...state.readSettings, ...updates },
-        settingsUpdatedAt: Date.now(),
-      })),
+      updateReadSettings: (updates) =>
+        set((state) => ({
+          readSettings: { ...state.readSettings, ...updates },
+          settingsUpdatedAt: Date.now(),
+        })),
 
-    updateTranslationConfig: (updates) =>
-      set((state) => ({
-        translationConfig: { ...state.translationConfig, ...updates },
-        settingsUpdatedAt: Date.now(),
-      })),
+      updateTranslationConfig: (updates) =>
+        set((state) => ({
+          translationConfig: { ...state.translationConfig, ...updates },
+          settingsUpdatedAt: Date.now(),
+        })),
 
-    updateAIConfig: (updates) =>
-      set((state) => ({
-        aiConfig: { ...state.aiConfig, ...updates },
-      })),
+      updateAIConfig: (updates) =>
+        set((state) => ({
+          aiConfig: { ...state.aiConfig, ...updates },
+        })),
 
-    // --- Endpoint management ---
+      setLearningLanguage: (lang) =>
+        set({
+          learningLanguage: lang,
+          settingsUpdatedAt: Date.now(),
+        }),
 
-    addEndpoint: (endpoint) =>
-      set((state) => ({
-        aiConfig: {
-          ...state.aiConfig,
-          endpoints: [...state.aiConfig.endpoints, endpoint],
-        },
-      })),
+      // --- Endpoint management ---
 
-    updateEndpoint: (id, updates) =>
-      set((state) => ({
-        aiConfig: {
-          ...state.aiConfig,
-          endpoints: state.aiConfig.endpoints.map((ep) =>
-            ep.id === id ? { ...ep, ...updates } : ep,
-          ),
-        },
-      })),
-
-    removeEndpoint: (id) =>
-      set((state) => {
-        const newEndpoints = state.aiConfig.endpoints.filter((ep) => ep.id !== id);
-        const newActiveId =
-          state.aiConfig.activeEndpointId === id
-            ? newEndpoints[0]?.id || ""
-            : state.aiConfig.activeEndpointId;
-        return {
+      addEndpoint: (endpoint) =>
+        set((state) => ({
           aiConfig: {
             ...state.aiConfig,
-            endpoints: newEndpoints,
-            activeEndpointId: newActiveId,
-            activeModel: state.aiConfig.activeEndpointId === id ? "" : state.aiConfig.activeModel,
+            endpoints: [...state.aiConfig.endpoints, endpoint],
           },
-        };
-      }),
+        })),
 
-    setActiveEndpoint: (id) =>
-      set((state) => ({
-        aiConfig: {
-          ...state.aiConfig,
-          activeEndpointId: id,
-          activeModel: "", // reset model when switching endpoint
-        },
-      })),
+      updateEndpoint: (id, updates) =>
+        set((state) => ({
+          aiConfig: {
+            ...state.aiConfig,
+            endpoints: state.aiConfig.endpoints.map((ep) =>
+              ep.id === id ? { ...ep, ...updates } : ep,
+            ),
+          },
+        })),
 
-    setActiveModel: (model) =>
-      set((state) => ({
-        aiConfig: { ...state.aiConfig, activeModel: model },
-      })),
+      removeEndpoint: (id) =>
+        set((state) => {
+          const newEndpoints = state.aiConfig.endpoints.filter((ep) => ep.id !== id);
+          const newActiveId =
+            state.aiConfig.activeEndpointId === id
+              ? newEndpoints[0]?.id || ""
+              : state.aiConfig.activeEndpointId;
+          return {
+            aiConfig: {
+              ...state.aiConfig,
+              endpoints: newEndpoints,
+              activeEndpointId: newActiveId,
+              activeModel: state.aiConfig.activeEndpointId === id ? "" : state.aiConfig.activeModel,
+            },
+          };
+        }),
 
-    getActiveEndpoint: () => {
-      const state = get();
-      return state.aiConfig.endpoints.find((ep) => ep.id === state.aiConfig.activeEndpointId);
-    },
+      setActiveEndpoint: (id) =>
+        set((state) => ({
+          aiConfig: {
+            ...state.aiConfig,
+            activeEndpointId: id,
+            activeModel: "", // reset model when switching endpoint
+          },
+        })),
 
-    fetchModels: async (endpointId) => {
-      const state = get();
-      const endpoint = state.aiConfig.endpoints.find((ep) => ep.id === endpointId);
-      if (!endpoint) return [];
+      setActiveModel: (model) =>
+        set((state) => ({
+          aiConfig: { ...state.aiConfig, activeModel: model },
+        })),
 
-      // Mark as fetching
-      set((s) => ({
-        aiConfig: {
-          ...s.aiConfig,
-          endpoints: s.aiConfig.endpoints.map((ep) =>
-            ep.id === endpointId ? { ...ep, modelsFetching: true } : ep,
-          ),
-        },
-      }));
+      getActiveEndpoint: () => {
+        const state = get();
+        return state.aiConfig.endpoints.find((ep) => ep.id === state.aiConfig.activeEndpointId);
+      },
 
-      try {
-        const models = await fetchModelsFromEndpoint(endpoint);
+      fetchModels: async (endpointId) => {
+        const state = get();
+        const endpoint = state.aiConfig.endpoints.find((ep) => ep.id === endpointId);
+        if (!endpoint) return [];
+
+        // Mark as fetching
         set((s) => ({
           aiConfig: {
             ...s.aiConfig,
             endpoints: s.aiConfig.endpoints.map((ep) =>
-              ep.id === endpointId
-                ? { ...ep, models, modelsFetched: true, modelsFetching: false }
-                : ep,
+              ep.id === endpointId ? { ...ep, modelsFetching: true } : ep,
             ),
           },
         }));
-        return models;
-      } catch (err) {
-        console.error("Failed to fetch models:", err);
-        set((s) => ({
-          aiConfig: {
-            ...s.aiConfig,
-            endpoints: s.aiConfig.endpoints.map((ep) =>
-              ep.id === endpointId ? { ...ep, modelsFetching: false } : ep,
-            ),
-          },
-        }));
-        throw err;
-      }
-    },
 
-    setTranslationLang: (lang) =>
-      set((state) => ({
-        translationConfig: { ...state.translationConfig, targetLang: lang },
-      })),
+        try {
+          const models = await fetchModelsFromEndpoint(endpoint);
+          set((s) => ({
+            aiConfig: {
+              ...s.aiConfig,
+              endpoints: s.aiConfig.endpoints.map((ep) =>
+                ep.id === endpointId
+                  ? { ...ep, models, modelsFetched: true, modelsFetching: false }
+                  : ep,
+              ),
+            },
+          }));
+          return models;
+        } catch (err) {
+          console.error("Failed to fetch models:", err);
+          set((s) => ({
+            aiConfig: {
+              ...s.aiConfig,
+              endpoints: s.aiConfig.endpoints.map((ep) =>
+                ep.id === endpointId ? { ...ep, modelsFetching: false } : ep,
+              ),
+            },
+          }));
+          throw err;
+        }
+      },
 
-    resetToDefaults: () =>
-      set({
-        readSettings: defaultReadSettings,
-        translationConfig: defaultTranslationConfig,
-        aiConfig: defaultAIConfig,
-      }),
-  }), undefined, migrateSettingsState),
+      setTranslationLang: (lang) =>
+        set((state) => ({
+          translationConfig: { ...state.translationConfig, targetLang: lang },
+        })),
+
+      resetToDefaults: () =>
+        set({
+          readSettings: defaultReadSettings,
+          translationConfig: defaultTranslationConfig,
+          aiConfig: defaultAIConfig,
+          learningLanguage: defaultLearningLanguage,
+        }),
+    }),
+    undefined,
+    migrateSettingsState,
+  ),
 );

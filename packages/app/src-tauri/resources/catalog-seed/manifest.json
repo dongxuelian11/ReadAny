@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "builtAt": "2026-09-13T12:04:15.528Z",
-  "seededAt": "2026-09-13T08:52:50.211Z",
+  "builtAt": "2026-09-13T16:41:38.389Z",
+  "seededAt": "2026-09-13T16:41:38.407Z",
   "counts": {
-    "totalEditions": 10358,
-    "bundled": 14,
+    "totalEditions": 10359,
+    "bundled": 15,
     "online": 10342,
     "metadataOnly": 2
   },
@@ -25,6 +25,15 @@
       "sha256": "f2002668c8bb466fd5522e623145e0a18eb6116cc60282c5af124ad0e982d44f",
       "sizeBytes": 22192685,
       "licenseId": "CC BY-NC-SA 4.0",
+      "verifiedAt": "2026-09-13"
+    },
+    {
+      "catalogEditionId": "curated:quant-for-beginners-zh",
+      "file": "quant-for-beginners-zh.epub",
+      "format": "epub",
+      "sha256": "c514c1b46cf1d81823d7035661dd21c88a8ec0623899790433a8b784ddeca84a",
+      "sizeBytes": 5116874,
+      "licenseId": "MIT",
       "verifiedAt": "2026-09-13"
     },
     {
@@ -135,5 +144,9 @@
       "licenseId": "Public domain (US)",
       "verifiedAt": "2026-09-13"
     }
-  ]
+  ],
+  "db": {
+    "sha256": "2975a4437d0f2f182172f2584b1680453a917dd5f46da54344972b47ef95ef35",
+    "sizeBytes": 23117824
+  }
 }

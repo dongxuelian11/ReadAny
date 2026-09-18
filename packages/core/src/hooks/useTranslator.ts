@@ -43,9 +43,12 @@ export function useTranslator(options: UseTranslatorOptions = {}) {
 
       const targetLanguage = targetLang || translationConfig.targetLang;
       const providerId = translationConfig.provider.id;
+      const aiEndpointId = translationConfig.provider.endpointId || aiConfig.activeEndpointId;
+      const aiEndpoint = aiConfig.endpoints.find((e) => e.id === aiEndpointId);
       const cacheVariant = translationCacheVariant(
         providerId,
         providerId === "ai" ? translationConfig.provider.model || aiConfig.activeModel : undefined,
+        providerId === "ai" ? aiEndpoint?.baseUrl : undefined,
       );
 
       const cachedResults: string[] = [];

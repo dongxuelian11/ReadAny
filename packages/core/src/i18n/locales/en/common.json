@@ -79,6 +79,9 @@
   "catalog": {
     "title": "Discover Library",
     "searchPlaceholder": "Search titles, authors or subjects (Chinese & English)",
+    "quantEntryBadge": "Quant · Learn in Chinese",
+    "quantEntryDesc": "Datawhale Quant for Beginners — 8 Chinese chapters + a synthetic-data walkthrough. Fully bundled, no setup required.",
+    "quantEntryAction": "Start learning",
     "statsLine": "{{total}} editions · {{bundled}} readable offline · built {{date}}",
     "subjectAll": "All subjects",
     "filterAll": "All",

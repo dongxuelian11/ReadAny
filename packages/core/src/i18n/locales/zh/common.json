@@ -79,6 +79,9 @@
   "catalog": {
     "title": "发现书库",
     "searchPlaceholder": "搜索书名、作者或主题（支持中英文与简繁）",
+    "quantEntryBadge": "金融量化 · 中文可学",
+    "quantEntryDesc": "Datawhale《量化入门》8 章中文教程 + 合成数据对照示例，内置完整正文，无需配置即可开始学习。",
+    "quantEntryAction": "开始学习",
     "statsLine": "共 {{total}} 条 · 内置可读 {{bundled}} 本 · 构建于 {{date}}",
     "subjectAll": "全部学科",
     "filterAll": "全部",

@@ -16,7 +16,7 @@
  * Usage: pnpm catalog:seed     (run AFTER pnpm catalog:build)
  */
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
@@ -31,6 +31,13 @@ const SEED_DIR = path.join(ROOT, "packages", "app", "src-tauri", "resources", "c
 const BOOKS_DIR = path.join(SEED_DIR, "books");
 const SUBJECTS = JSON.parse(
   readFileSync(path.join(ROOT, "packages", "core", "src", "catalog", "subjects.json"), "utf8"),
+);
+const CURATED = JSON.parse(readFileSync(path.join(__dirname, "curated-books.json"), "utf8"));
+/** catalogEditionId → repo-local build output for source.kind === "build-output". */
+const BUILD_OUTPUT_SOURCES = new Map(
+  CURATED.books
+    .filter((b) => b.source?.kind === "build-output")
+    .map((b) => [b.catalogEditionId, path.join(ROOT, b.source.path)]),
 );
 
 const MIN_EPUB_BYTES = 30_000;
@@ -254,12 +261,15 @@ async function main() {
   const manifestBooks = [];
   for (const row of bundled) {
     const url = row.resource_download_url;
-    if (!url) throw new Error(`bundled edition ${row.catalog_edition_id} has no download URL`);
+    const buildOutput = BUILD_OUTPUT_SOURCES.get(row.catalog_edition_id);
+    if (!url && !buildOutput) {
+      throw new Error(`bundled edition ${row.catalog_edition_id} has no download URL`);
+    }
     const file = row.bundled_file;
     const dest = path.join(BOOKS_DIR, file);
     console.log(`[seed] ${row.catalog_edition_id}: ${row.title_zh || row.original_title}`);
-    console.log(`       from ${url}`);
-    const buf = await download(url);
+    console.log(`       from ${url ?? buildOutput}`);
+    const buf = buildOutput ? readFileSync(buildOutput) : await download(url);
 
     const isEpub = file.toLowerCase().endsWith(".epub");
     let verified;
@@ -339,6 +349,12 @@ async function main() {
     seededAt: new Date().toISOString(),
     counts,
     books: manifestBooks,
+    // Integrity expectation for catalog.sqlite itself (checked by seed.ts
+    // before replacing the user's copy).
+    db: {
+      sha256: createHash("sha256").update(readFileSync(dbPath)).digest("hex"),
+      sizeBytes: statSync(dbPath).size,
+    },
   };
   writeFileSync(path.join(SEED_DIR, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   db.close();

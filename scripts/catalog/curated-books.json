@@ -162,6 +162,28 @@
       "attribution": "Project Gutenberg（www.gutenberg.org/ebooks/35461）"
     },
     {
+      "catalogEditionId": "curated:quant-for-beginners-zh",
+      "provider": "curated",
+      "source": {
+        "kind": "build-output",
+        "path": "scripts/quant/out/quant-for-beginners-zh.epub",
+        "origin": "datawhalechina/quant-for-beginners@b385684ee100813ebfb35f738cfcbcb6d96e356a (notebooks/, MIT)"
+      },
+      "originalTitle": "Quant for Beginners — 金融量化入门中文学习包（静态转换阅读版）",
+      "titleZh": "金融量化入门（中文学习包）",
+      "titleZhSource": "original",
+      "authors": ["Datawhale quant-for-beginners 项目组"],
+      "language": "zh",
+      "publisher": "ReadAny 学习包构建（Datawhale 原作，MIT）",
+      "subjects": ["econ-finance", "math"],
+      "level": "入门",
+      "descriptionZh": "把 Datawhale 开源项目 quant-for-beginners 的 8 章中文 Notebook（量化概念、第一个实验、均线策略、回测、波动率、Sharpe 与 Beta、最大回撤与仓位、组合相关性）静态转换为可直接阅读的中文学习包：正文、代码、公式（MathML）与静态图表保留，交互输出以说明替代，另附 ReadAny 自创的合成数据对照回测一章（已标注）。原作 MIT 许可，固定版本 b385684e。学习材料，不构成投资建议。",
+      "licenseId": "MIT",
+      "licenseUrl": "https://github.com/datawhalechina/quant-for-beginners/blob/b385684ee100813ebfb35f738cfcbcb6d96e356a/LICENSE",
+      "attribution": "Datawhale quant-for-beginners 项目组（MIT License, b385684ee100813ebfb35f738cfcbcb6d96e356a）；ReadAny 静态转换，附录为自创内容",
+      "landingUrl": "https://github.com/datawhalechina/quant-for-beginners/tree/b385684ee100813ebfb35f738cfcbcb6d96e356a"
+    },
+    {
       "catalogEditionId": "gutenberg:3300",
       "provider": "gutenberg",
       "gutenbergId": 3300,
