@@ -28,6 +28,7 @@ import type { TeachingHelpController } from "@/lib/learner/use-teaching-help";
 import { useSettingsStore } from "@/stores/settings-store";
 import {
   currentPlacementItem,
+  currentTeachingStep,
   currentTeachingStepView,
   initialLearnerPanelState,
   learnerPanelReducer,
@@ -38,6 +39,7 @@ import type {
   LearnerTab,
   MasteryStatus,
   PlacementVerdict,
+  TeachingHelpKind,
   TeachingStep,
 } from "@readany/core/learner";
 import type { Book } from "@readany/core/types";
@@ -61,6 +63,10 @@ interface LearnerPanelProps {
    * selected passage, if any. Anchors teaching/help context on what the
    * learner is actually looking at instead of always the chapter head. */
   readerFocus?: { chapterIndex: number; selectedText: string } | null;
+  /** LEARN-01: a help ask issued from the reader's selection popover. The
+   * panel owns the single help controller, so the popover only forwards the
+   * intent; consumed once per nonce, and only for the matching book. */
+  incomingHelpRequest?: { kind: TeachingHelpKind; bookId: string; nonce: number } | null;
 }
 
 const STATUS_CHIP_CLASS: Record<MasteryStatus, string> = {
@@ -79,13 +85,22 @@ function chapterIndexFromConceptId(conceptId: string): number | null {
   return match ? Number(match[1]) : null;
 }
 
-export function LearnerPanel({ book, onNavigateToChapter, readerFocus }: LearnerPanelProps) {
+export function LearnerPanel({
+  book,
+  onNavigateToChapter,
+  readerFocus,
+  incomingHelpRequest,
+}: LearnerPanelProps) {
   const { t } = useTranslation();
   const [state, dispatch] = useReducer(learnerPanelReducer, initialLearnerPanelState);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const aiConfig = useSettingsStore((state) => state.aiConfig);
   const bookRef = useRef(book);
   bookRef.current = book;
+  // LEARN-01: nonce of the last consumed selection-popover help request, so a
+  // rendered-but-unconsumed request waits for the teaching session to load and
+  // never fires twice.
+  const consumedHelpRequestRef = useRef<number | null>(null);
   // WP-B (F04): one attempt identity per review answer, minted when the
   // answer is first submitted and reused by save retries. A retry never
   // mints a second event; changing the selected option is a NEW attempt.
@@ -225,6 +240,22 @@ export function LearnerPanel({ book, onNavigateToChapter, readerFocus }: Learner
     aiConfigured: Boolean(aiConfig.activeModel),
     getFocusExcerpt: focusExcerptFor,
   });
+
+  // LEARN-01: a help ask from the reader's selection popover. It may arrive
+  // before the goal workspace has loaded — wait for the teaching session to
+  // appear, then fire once (nonce-guarded, matching book only). The selected
+  // passage already rides along as the focus excerpt via readerFocus.
+  useEffect(() => {
+    if (!incomingHelpRequest) return;
+    if (incomingHelpRequest.bookId !== book.id) return;
+    if (consumedHelpRequestRef.current === incomingHelpRequest.nonce) return;
+    const teaching = state.teaching;
+    if (!teaching || teaching.status !== "active") return;
+    const step = currentTeachingStep(teaching);
+    consumedHelpRequestRef.current = incomingHelpRequest.nonce;
+    if (!step || !step.content || step.answered) return;
+    void help.requestHelp(incomingHelpRequest.kind, null);
+  }, [incomingHelpRequest, book.id, state.teaching, help]);
 
   const handleCreateGoal = async (goalText: string) => {
     if (!aiConfig.activeModel) {
