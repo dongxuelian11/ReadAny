@@ -38,6 +38,7 @@ import * as katex from "katex";
 import { marked } from "marked";
 import sharp from "sharp";
 import { buildCatalogIndexText } from "../../packages/core/src/catalog/normalize.ts";
+import { computeSyntheticBacktest } from "./synthetic-backtest.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..", "..");
@@ -368,104 +369,9 @@ ${body}
 }
 
 // ── appendix: self-authored synthetic backtest (deterministic) ─────────────
-
-function mulberry32(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** The exact strategy shown in the appendix, run on fixed synthetic data. */
-function computeSyntheticBacktest() {
-  const rand = mulberry32(42);
-  const gaussian = () => {
-    const u = Math.max(rand(), 1e-9);
-    const v = rand();
-    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-  };
-  const nDays = 500;
-  const s0 = 100;
-  const mu = 0.08;
-  const sigma = 0.2;
-  const dt = 1 / 252;
-  const prices = [s0];
-  for (let i = 1; i < nDays; i++) {
-    prices.push(
-      prices[i - 1] *
-        Math.exp((mu - (sigma * sigma) / 2) * dt + sigma * Math.sqrt(dt) * gaussian()),
-    );
-  }
-
-  const sma = (window, idx) => {
-    if (idx + 1 < window) return null;
-    let sum = 0;
-    for (let j = idx - window + 1; j <= idx; j++) sum += prices[j];
-    return sum / window;
-  };
-
-  const FEE = 0.0005; // 0.05% per side
-  const _position = 0; // 0/1 — uses YESTERDAY's signal (shift(1): no lookahead)
-  let equity = 1;
-  const dailyReturns = [];
-  let peak = 1;
-  let maxDd = 0;
-  let trades = 0;
-  const bhReturns = [];
-  let bhPeak = 1;
-  let bhMaxDd = 0;
-
-  for (let i = 60; i < nDays; i++) {
-    const fast = sma(20, i);
-    const slow = sma(60, i);
-    const signal = fast > slow ? 1 : 0;
-    const prevSignal = i >= 61 ? (sma(20, i - 1) > sma(60, i - 1) ? 1 : 0) : 0;
-    const dayRet = prices[i] / prices[i - 1] - 1;
-    // cost when the POSITION (from yesterday's signal) changes today
-    if (signal !== prevSignal) {
-      trades++;
-      equity *= 1 - FEE * Math.abs(signal - prevSignal);
-    }
-    equity *= 1 + dayRet * signal;
-    dailyReturns.push(dayRet * signal);
-    peak = Math.max(peak, equity);
-    maxDd = Math.max(maxDd, 1 - equity / peak);
-    bhReturns.push(dayRet);
-    const bhEquity = prices[i] / prices[60];
-    bhPeak = Math.max(bhPeak, bhEquity);
-    bhMaxDd = Math.max(bhMaxDd, 1 - bhEquity / bhPeak);
-  }
-
-  const ann = (rs) => {
-    const mean = rs.reduce((a, b) => a + b, 0) / rs.length;
-    const sd = Math.sqrt(rs.reduce((a, b) => a + (b - mean) ** 2, 0) / (rs.length - 1));
-    return {
-      mean: mean * 252,
-      sd: sd * Math.sqrt(252),
-      sharpe: sd > 0 ? (mean * 252) / (sd * Math.sqrt(252)) : 0,
-    };
-  };
-  const strat = ann(dailyReturns);
-  const bh = ann(bhReturns);
-  return {
-    days: nDays,
-    trades,
-    strategyTotal: equity,
-    strategyAnnRet: strat.mean,
-    strategyAnnVol: strat.sd,
-    strategySharpe: strat.sharpe,
-    strategyMaxDd: maxDd,
-    bhTotal: prices[nDays - 1] / prices[60],
-    bhAnnRet: bh.mean,
-    bhAnnVol: bh.sd,
-    bhSharpe: bh.sharpe,
-    bhMaxDd: bhMaxDd,
-  };
-}
+// The computation lives in synthetic-backtest.mjs — ONE implementation shared
+// with verify-pack.mjs, which re-computes the numbers and FAILS the build if
+// the shipped appendix table drifts from them.
 
 function appendixXhtml(r) {
   const pct = (x) => `${(x * 100).toFixed(1)}%`;
@@ -473,7 +379,7 @@ function appendixXhtml(r) {
   const code = `import numpy as np
 import pandas as pd
 
-FEE = 0.0005  # 单边手续费 0.05%（示例假设）
+FEE = 0.0005  # 单边手续费 0.05%（线性，示例假设）
 
 rng = np.random.default_rng(42)
 n_days, s0, mu, sigma = 500, 100.0, 0.08, 0.20
@@ -487,47 +393,56 @@ sma_fast, sma_slow = px.rolling(20).mean(), px.rolling(60).mean()
 signal = (sma_fast > sma_slow).astype(int).shift(1).fillna(0)
 raw_ret = px.pct_change().fillna(0)
 turnover = signal.diff().abs().fillna(0)
-strat_ret = raw_ret * signal - turnover * FEE
+strat_ret = raw_ret * signal - turnover * FEE   # 净收益口径：费用计入每日收益
 
 equity = (1 + strat_ret).cumprod()
 bh = (1 + raw_ret).cumprod()
 
+trades = int(turnover.sum())
 sharpe = strat_ret.mean()/strat_ret.std()*np.sqrt(252)
-max_dd = (equity/equity.cummax() - 1).min()`;
+max_dd = (equity/equity.cummax() - 1).min()   # 负值；下表按正数展示`;
+
+  // Every cell carries its machine value so verify-pack.mjs can re-compute
+  // the backtest and assert the shipped numbers match (non-zero exit on
+  // drift). All metrics come from the SAME net-of-fee series.
+  const cell = (metric, value, rendered) =>
+    `<td data-metric="${metric}" data-value="${value.toPrecision(17)}">${rendered}</td>`;
 
   return `
 <section class="appendix-note">
   <p><strong>本章为 ReadAny 自创的对照示例</strong>，不属于 Datawhale 原作内容，数据为固定种子（42）生成的合成行情，
-  仅供理解第3、4章中“信号时点、手续费、回撤”等概念，<strong>不构成任何收益承诺或投资建议</strong>。</p>
+  仅供理解第3、4章中“信号时点、手续费、回撤”等概念，<strong>不构成任何收益承诺或投资建议</strong>。
+  下表全部指标来自<strong>同一份扣费后的每日收益序列</strong>；信号在次日执行（shift(1)），统计与展示口径一致。</p>
 </section>
 
 <h2>为什么需要合成数据对照</h2>
 <p>真实行情难以复现。固定种子的合成数据让每个数字都可以被任何人用同一段代码重新算出来，
-适合用来<strong>核对回测里最容易犯的两个错误</strong>：使用了未来数据（信号未右移）与忽略交易成本。</p>
+适合用来<strong>核对回测里最容易犯的三个错误</strong>：使用了未来数据（信号未右移）、
+费用只改净值不改收益序列、以及展示代码与计算实现各算各的。</p>
 
 <h2>示例代码（静态展示）</h2>
 <div class="codeblock"><div class="codelabel">示例代码（Python，静态展示，不可执行）</div><pre><code>${escapeXml(code)}</code></pre></div>
 
 <h2>本机构建时的实际运行结果</h2>
-<p>构建脚本用同一套参数（固定种子 42，${r.days} 个交易日，年化波动 20% 的设定）算出的结果如下——
-数字本身没有意义，<strong>方法上的差别</strong>才有意义：</p>
+<p>构建脚本与展示代码使用同一套语义（固定种子 42，${r.days} 个交易日，年化波动 20% 的设定），
+结果如下——数字本身没有意义，<strong>方法上的差别</strong>才有意义：</p>
 
 <table>
-  <thead><tr><th>指标</th><th>均线策略（含 0.05% 单边费用）</th><th>买入持有</th></tr></thead>
+  <thead><tr><th>指标</th><th>均线策略（费用后，净口径）</th><th>买入持有</th></tr></thead>
   <tbody>
-    <tr><td>累计收益（自第61日起）</td><td>${pct(r.strategyTotal - 1)}</td><td>${pct(r.bhTotal - 1)}</td></tr>
-    <tr><td>年化收益</td><td>${pct(r.strategyAnnRet)}</td><td>${pct(r.bhAnnRet)}</td></tr>
-    <tr><td>年化波动</td><td>${pct(r.strategyAnnVol)}</td><td>${pct(r.bhAnnVol)}</td></tr>
-    <tr><td>夏普比率（无风险利率取 0）</td><td>${num(r.strategySharpe)}</td><td>${num(r.bhSharpe)}</td></tr>
-    <tr><td>最大回撤</td><td>${pct(r.strategyMaxDd)}</td><td>${pct(r.bhMaxDd)}</td></tr>
-    <tr><td>调仓次数</td><td>${r.trades}</td><td>1</td></tr>
+    <tr><td>累计收益（全期）</td><td>${cell("strategyTotal", r.strategyTotal, pct(r.strategyTotal - 1))}</td><td>${cell("bhTotal", r.bhTotal, pct(r.bhTotal - 1))}</td></tr>
+    <tr><td>年化收益</td><td>${cell("strategyAnnRet", r.strategyAnnRet, pct(r.strategyAnnRet))}</td><td>${cell("bhAnnRet", r.bhAnnRet, pct(r.bhAnnRet))}</td></tr>
+    <tr><td>年化波动</td><td>${cell("strategyAnnVol", r.strategyAnnVol, pct(r.strategyAnnVol))}</td><td>${cell("bhAnnVol", r.bhAnnVol, pct(r.bhAnnVol))}</td></tr>
+    <tr><td>夏普比率（无风险利率取 0）</td><td>${cell("strategySharpe", r.strategySharpe, num(r.strategySharpe))}</td><td>${cell("bhSharpe", r.bhSharpe, num(r.bhSharpe))}</td></tr>
+    <tr><td>最大回撤</td><td>${cell("strategyMaxDd", r.strategyMaxDd, pct(r.strategyMaxDd))}</td><td>${cell("bhMaxDd", r.bhMaxDd, pct(r.bhMaxDd))}</td></tr>
+    <tr><td>调仓次数</td><td>${cell("trades", r.trades, String(r.trades))}</td><td>1</td></tr>
   </tbody>
 </table>
 
 <h2>请核对的三件事</h2>
 <ol>
   <li><strong>信号时点</strong>：代码中 <code>signal.shift(1)</code> —— 今天收盘算出的信号，明天才执行。删掉 shift 再跑一遍，结果会明显变好，但那是“偷看未来”，不可信。</li>
-  <li><strong>交易成本</strong>：每次换仓扣 0.05% 单边。调仓次数越多，费用拖累越大——高频翻转的均线信号对成本非常敏感。</li>
+  <li><strong>费用口径</strong>：费用从每日收益里扣（<code>strat_ret</code> 本身是净收益），累计净值、年化、夏普、回撤全部来自同一序列——不存在“净值扣了费、收益率还是毛的”的错位。</li>
   <li><strong>样本内外</strong>：合成数据上的“好看”不等于真实市场有效；真实数据上应划分样本外区间再评估。</li>
 </ol>
 <p class="dynnote">本例使用 A 股之外无涨跌停限制的简化假设；具体市场规则请以官方资料为准。</p>`;

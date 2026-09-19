@@ -269,7 +269,10 @@ export async function acquireOnlineEdition(
       importingEditions.add(editionId);
       return useLibraryStore.getState().importBooks([temp.tempPath]);
     });
-    importingEditions.delete(editionId);
+    // P2: importingEditions stays set through the WHOLE finalization window
+    // (temp cleanup → ready write → open) so cancelAcquire cannot promise a
+    // cancel that keeps completing. The finally below releases it on every
+    // exit path.
     await cleanupAcquireTempFile(temp.tempPath);
     tempPath = null;
 
