@@ -332,6 +332,15 @@ export const BookCard = memo(function BookCard({
           </div>
         )}
 
+        {/* Index failed badge — book stays readable; search is not prepared */}
+        {book.vectorizeError && !vectorizing && !book.isVectorized && (
+          <div className="absolute left-1 top-1 z-10 flex items-center rounded bg-amber-600/80 px-1 py-0.5 backdrop-blur-sm">
+            <span className="text-[9px] font-medium text-white">
+              {t("home.vec_failed", "索引失败，可重试")}
+            </span>
+          </div>
+        )}
+
         {/* Context menu trigger — hover only */}
         <button
           ref={menuBtnRef}

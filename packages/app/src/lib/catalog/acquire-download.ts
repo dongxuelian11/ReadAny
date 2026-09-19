@@ -1,20 +1,21 @@
 import { resolveDesktopDataPath } from "@/lib/storage/desktop-library-root";
 import type { CatalogEdition } from "@readany/core/catalog";
+import {
+  MAX_DOWNLOAD_BYTES,
+  sha256Hex,
+  verifyBookBytes,
+} from "@readany/core/catalog/download-verify";
 import { remove, writeFile } from "@tauri-apps/plugin-fs";
 
 /**
- * One-click full-text download for catalog editions (LIB-2).
+ * One-click full-text download for catalog editions (LIB-2 / KB-01).
  *
- * Fetches the edition's verified download URL over HTTPS, enforces a size cap,
- * validates the payload is a real book file (magic bytes, EPUB container,
- * optional sha256 from the catalog manifest) and stages it as a temp file for
- * the standard importBooks path. HTML error pages served with a 200 status are
- * rejected by the magic-byte check.
+ * Fetches the edition's verified download URL over HTTPS, enforces the size
+ * cap, validates the payload with the core byte gate (magic bytes, HTML
+ * masquerade, size floors, sha256 pin) plus the EPUB container check, and
+ * stages it as a temp file for the standard importBooks path.
  */
 
-const MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024;
-const MIN_EPUB_BYTES = 30_000;
-const MIN_PDF_BYTES = 500_000;
 const PROGRESS_EMIT_BYTES = 256 * 1024;
 
 export interface DownloadVerifyResult {
@@ -25,11 +26,6 @@ export interface DownloadVerifyResult {
 }
 
 export class AcquireError extends Error {}
-
-async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", bytes as unknown as ArrayBuffer);
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
 
 function extensionFor(edition: CatalogEdition): "epub" | "pdf" {
   const url = (edition.resource.downloadUrl || "").toLowerCase();
@@ -142,29 +138,17 @@ export async function downloadAndVerifyCatalogFile(
     offset += chunk.byteLength;
   }
 
-  // ── Verification ──
-  const isPk = bytes[0] === 0x50 && bytes[1] === 0x4b;
-  const isPdf = bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46;
-  const looksHtml =
-    bytes.length > 15 &&
-    (bytes[0] === 0x3c ||
-      new TextDecoder().decode(bytes.subarray(0, 200)).match(/<html|<!doctype/i));
-  if (looksHtml) throw new AcquireError("下载内容是网页而不是书籍文件（来源可能已失效）");
-
+  // ── Verification (core byte gate + EPUB container check) ──
+  try {
+    await verifyBookBytes(bytes, format, edition.resource.sha256);
+  } catch (err) {
+    if (err instanceof AcquireError) throw err;
+    throw new AcquireError(err instanceof Error ? err.message : String(err));
+  }
   if (format === "epub") {
-    if (!isPk) throw new AcquireError("下载内容不是有效的 EPUB 文件");
-    if (bytes.length < MIN_EPUB_BYTES) throw new AcquireError("EPUB 文件过小，内容不完整");
     await verifyEpubContainer(bytes);
-  } else {
-    if (!isPdf) throw new AcquireError("下载内容不是有效的 PDF 文件");
-    if (bytes.length < MIN_PDF_BYTES) throw new AcquireError("PDF 文件过小，内容不完整");
   }
-
   const sha256 = await sha256Hex(bytes);
-  const expected = edition.resource.sha256?.toLowerCase();
-  if (expected && expected !== sha256) {
-    throw new AcquireError("下载内容与目录记录的校验值不符，已拒绝导入");
-  }
 
   // Stage as temp file in the user data dir.
   const tempRelative = `tmp/catalog-${safeFileStem(edition.catalogEditionId)}.${format}`;

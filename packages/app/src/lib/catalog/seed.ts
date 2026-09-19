@@ -1,6 +1,7 @@
 import { getDataRootReady } from "@/lib/storage/data-root-bootstrap";
 import { resolveDesktopDataPath } from "@/lib/storage/desktop-library-root";
 import { CATALOG_SCHEMA_VERSION } from "@readany/core/catalog";
+import { planSeedSwap, promoteStagedCatalog } from "@readany/core/catalog/seed-recovery";
 import { getPlatformService } from "@readany/core/services";
 import { join } from "@tauri-apps/api/path";
 import {
@@ -152,7 +153,25 @@ async function doEnsureCatalogSeeded(): Promise<CatalogSeedResult> {
     platform.kvGetItem(SEED_VERSION_KEY),
     platform.kvGetItem(SEED_BUILT_AT_KEY),
   ]);
-  const dbExists = await exists(dbPath);
+  let dbExists = await exists(dbPath);
+  const bakPath = `${dbPath}.bak`;
+
+  // KB-01/F02: a leftover .bak (previous launch died mid-swap) IS the newest
+  // catalog — recover it before any copying, and fail loudly (keeping the
+  // backup) if recovery fails, instead of copying over it or faking an OK.
+  const plan = planSeedSwap({ dbExists, bakExists: await exists(bakPath) });
+  if (plan.phase === "recover-bak") {
+    try {
+      await rename(bakPath, dbPath);
+      dbExists = true;
+      console.warn("[catalog] recovered catalog from leftover .bak");
+    } catch (err) {
+      throw new Error(
+        `catalog.sqlite is missing and its backup could not be restored: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
   const needsInstall =
     !dbExists ||
     storedVersion !== String(manifest.schemaVersion) ||
@@ -168,10 +187,10 @@ async function doEnsureCatalogSeeded(): Promise<CatalogSeedResult> {
     }
 
     // Stage → verify → replace. Everything happens in the same directory so
-    // the final swap is a same-volume rename, and the previous catalog stays
-    // intact until the verified replacement succeeds.
+    // the final swap is a same-volume rename. The backup is removed ONLY once
+    // the new snapshot verifiably took over; a promotion+restore double
+    // failure keeps it for the next launch's recovery (planSeedSwap).
     const tmpPath = `${dbPath}.tmp`;
-    const bakPath = `${dbPath}.bak`;
     try {
       await remove(tmpPath).catch(() => {});
       await copyFile(await join(seedBase, "catalog.sqlite"), tmpPath);
@@ -180,14 +199,25 @@ async function doEnsureCatalogSeeded(): Promise<CatalogSeedResult> {
       if (dbExists) {
         await remove(bakPath).catch(() => {});
         await rename(dbPath, bakPath);
-        try {
-          await rename(tmpPath, dbPath);
-        } catch (err) {
-          // The new copy failed to take over — restore the previous catalog.
-          await rename(bakPath, dbPath).catch(() => {});
-          throw err;
+        const swap = await promoteStagedCatalog({
+          promote: () => rename(tmpPath, dbPath),
+          restore: () => rename(bakPath, dbPath),
+        });
+        if (swap.outcome === "promoted") {
+          await remove(bakPath).catch(() => {});
+        } else if (swap.outcome === "restored") {
+          // Old copy is back in place; markers stay stale so the next launch
+          // retries the refresh. Surface the real cause.
+          console.warn(
+            `[catalog] snapshot promote failed, old copy restored: ${swap.promoteError}`,
+          );
+        } else {
+          // Double failure: the .bak is the ONLY recoverable copy — never
+          // delete it here. The next launch recovers via planSeedSwap.
+          throw new Error(
+            `catalog swap failed (promote: ${swap.promoteError}) AND restore failed (${swap.restoreError}) — backup kept at ${bakPath}`,
+          );
         }
-        await remove(bakPath).catch(() => {});
       } else {
         await rename(tmpPath, dbPath);
       }
@@ -196,17 +226,22 @@ async function doEnsureCatalogSeeded(): Promise<CatalogSeedResult> {
       await platform.kvSetItem(SEED_BUILT_AT_KEY, manifest.builtAt);
       installed = true;
     } catch (err) {
-      if (dbExists) {
-        // The stale copy still works — retry the upgrade on the next launch
-        // (markers are intentionally NOT updated). Never block the library on
-        // a snapshot refresh.
+      if (dbExists && (await exists(dbPath).catch(() => false))) {
+        // The old copy is still in place — retry the upgrade on the next
+        // launch (markers are intentionally NOT updated). Never block the
+        // library on a snapshot refresh.
         console.warn("[catalog] snapshot refresh failed, using existing copy:", err);
+      } else if (dbExists) {
+        // The old copy was moved away and did not come back — say so instead
+        // of pretending an existing copy is in use.
+        throw new Error(
+          `catalog.sqlite is missing after a failed swap; backup may exist at ${bakPath}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       } else {
         throw err;
       }
     } finally {
       await remove(tmpPath).catch(() => {});
-      await remove(bakPath).catch(() => {});
     }
   }
 

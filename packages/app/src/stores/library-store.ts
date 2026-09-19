@@ -351,7 +351,7 @@ export interface LibraryState {
   setBooks: (books: Book[]) => void;
   setGroupView: (enabled: boolean) => void;
   setActiveGroupId: (groupId: string) => void;
-  addBook: (book: Book) => void;
+  addBook: (book: Book) => Promise<void>;
   removeBook: (bookId: string, options?: RemoveBookOptions) => Promise<void>;
   updateBook: (bookId: string, updates: Partial<Book>) => Promise<void>;
   setFilter: (filter: Partial<LibraryFilter>) => void;
@@ -780,10 +780,19 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       isGroupView: Boolean(groupId) || get().isGroupView,
     }),
 
-  addBook: (book) => {
+  addBook: async (book) => {
     set((state) => ({ books: [...state.books, book] }));
-    // Persist to DB (fire and forget)
-    db.insertBook(book).catch((err) => console.error("Failed to insert book into database:", err));
+    try {
+      // Persist BEFORE reporting success: a failed insert must never leave a
+      // phantom Book in the UI or start indexing/ready tasks (KB-01/F01).
+      await db.insertBook(book);
+    } catch (err) {
+      console.error("Failed to insert book into database:", err);
+      // Roll the optimistic entry back so the store matches the database.
+      set((state) => ({ books: state.books.filter((b) => b.id !== book.id) }));
+      debouncedSave("library-books", get().books);
+      throw err;
+    }
     // Update FS cache
     debouncedSave("library-books", get().books);
   },
@@ -912,11 +921,17 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
           }
 
           let deletedMatch = fileHash
-            ? await db.getDeletedBookByFileHash(fileHash).catch((err) => { console.warn("[Library] Failed to check deleted book by hash:", err); return null; })
+            ? await db.getDeletedBookByFileHash(fileHash).catch((err) => {
+                console.warn("[Library] Failed to check deleted book by hash:", err);
+                return null;
+              })
             : null;
           // Fallback: match by title if hash lookup failed (e.g. hash was null on first import)
           if (!deletedMatch && title) {
-            deletedMatch = await db.getDeletedBookByTitle(title).catch((err) => { console.warn("[Library] Failed to check deleted book by title:", err); return null; });
+            deletedMatch = await db.getDeletedBookByTitle(title).catch((err) => {
+              console.warn("[Library] Failed to check deleted book by title:", err);
+              return null;
+            });
           }
           const bookId = deletedMatch?.id ?? crypto.randomUUID();
 
@@ -1087,23 +1102,31 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
 
           if (deletedMatch) {
             set((state) => ({ books: [...state.books, book] }));
-            db.updateBook(book.id, {
-              filePath: book.filePath,
-              format: book.format,
-              meta: book.meta,
-              deletedAt: undefined,
-              progress: book.progress,
-              currentCfi: book.currentCfi,
-              isVectorized: false,
-              vectorizeProgress: 0,
-              tags: book.tags,
-              fileHash: book.fileHash,
-              syncStatus: "local",
-              lastOpenedAt: Date.now(),
-            }).catch((err) => console.error("Failed to restore deleted book from database:", err));
+            try {
+              // Restore path must also persist before claiming success.
+              await db.updateBook(book.id, {
+                filePath: book.filePath,
+                format: book.format,
+                meta: book.meta,
+                deletedAt: undefined,
+                progress: book.progress,
+                currentCfi: book.currentCfi,
+                isVectorized: false,
+                vectorizeProgress: 0,
+                tags: book.tags,
+                fileHash: book.fileHash,
+                syncStatus: "local",
+                lastOpenedAt: Date.now(),
+              });
+            } catch (err) {
+              console.error("Failed to restore deleted book from database:", err);
+              set((state) => ({ books: state.books.filter((b) => b.id !== book.id) }));
+              debouncedSave("library-books", get().books);
+              throw err;
+            }
             debouncedSave("library-books", get().books);
           } else {
-            get().addBook(book);
+            await get().addBook(book);
           }
           result.imported.push(book);
           if (fileHash) {
@@ -1119,9 +1142,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
           ) {
             triggerVectorizeBook(book.id, relativePath, (progress) => {
               // Update book's vectorizeProgress so BookCard can show it
-              const pct = progress.totalChunks > 0
-                ? progress.processedChunks / progress.totalChunks
-                : 0;
+              const pct =
+                progress.totalChunks > 0 ? progress.processedChunks / progress.totalChunks : 0;
               get().updateBook(book.id, { vectorizeProgress: pct });
             }).catch((err) => {
               console.warn(`[importBooks] Auto-vectorize failed for ${title}:`, err);
@@ -1301,7 +1323,9 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     // Persist book tag changes to DB
     const books = get().books;
     for (const b of books) {
-      db.updateBook(b.id, { tags: b.tags }).catch((err) => console.warn("[Library] Failed to update book tags:", err));
+      db.updateBook(b.id, { tags: b.tags }).catch((err) =>
+        console.warn("[Library] Failed to update book tags:", err),
+      );
     }
   },
 
@@ -1321,7 +1345,9 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     });
     for (const b of get().books) {
       if (b.tags.includes(trimmed)) {
-        db.updateBook(b.id, { tags: b.tags }).catch((err) => console.warn("[Library] Failed to update book tags:", err));
+        db.updateBook(b.id, { tags: b.tags }).catch((err) =>
+          console.warn("[Library] Failed to update book tags:", err),
+        );
       }
     }
   },
@@ -1338,7 +1364,10 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       return { books, allTags };
     });
     const book = get().books.find((b) => b.id === bookId);
-    if (book) db.updateBook(bookId, { tags: book.tags }).catch((err) => console.warn("[Library] Failed to update book tags:", err));
+    if (book)
+      db.updateBook(bookId, { tags: book.tags }).catch((err) =>
+        console.warn("[Library] Failed to update book tags:", err),
+      );
   },
 
   removeTagFromBook: (bookId, tag) => {
@@ -1350,6 +1379,9 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       return { books };
     });
     const book = get().books.find((b) => b.id === bookId);
-    if (book) db.updateBook(bookId, { tags: book.tags }).catch((err) => console.warn("[Library] Failed to update book tags:", err));
+    if (book)
+      db.updateBook(bookId, { tags: book.tags }).catch((err) =>
+        console.warn("[Library] Failed to update book tags:", err),
+      );
   },
 }));

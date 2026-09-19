@@ -51,9 +51,23 @@ export async function triggerVectorizeBook(
     onBookUpdate: useLibraryStore.getState().updateBook,
   };
 
-  // Extract chapters from the book file (platform-specific: Tauri + foliate-js)
-  const chapters = await extractBookChapters(resolvedPath);
+  // KB-01/F03: surface indexing state honestly — starting clears any stale
+  // failure; a real failure is persisted on the book (readability is NOT
+  // affected; the card can show "准备失败" with retry instead of silent
+  // console-only warnings).
+  await useLibraryStore.getState().updateBook(bookId, { vectorizeError: undefined });
 
-  // Delegate to core
-  await coreTriggerVectorizeBook(bookId, chapters, config, callbacks, onProgress);
+  try {
+    // Extract chapters from the book file (platform-specific: Tauri + foliate-js)
+    const chapters = await extractBookChapters(resolvedPath);
+    // Delegate to core
+    await coreTriggerVectorizeBook(bookId, chapters, config, callbacks, onProgress);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await useLibraryStore
+      .getState()
+      .updateBook(bookId, { vectorizeError: message.slice(0, 500) })
+      .catch(() => {});
+    throw err;
+  }
 }
