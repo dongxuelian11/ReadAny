@@ -246,9 +246,6 @@ export async function requestTeachingHelp(
 ): Promise<TeachingSession> {
   const { session } = params;
   if (session.status !== "active") throw new Error("The teaching session is not active");
-  if (session.currentIndex !== params.session.currentIndex) {
-    throw new SessionStaleError(session.id);
-  }
   const step = currentTeachingStep(session);
   if (!step) throw new Error("The teaching session has no current step");
   const content = step.content;

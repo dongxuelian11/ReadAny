@@ -335,6 +335,20 @@ describe("LEARN-01 teaching help", () => {
     const bounded = session.steps[0].helpVariants ?? [];
     expect(bounded).toHaveLength(TEACHING_HELP_VARIANTS_MAX);
     expect(bounded[bounded.length - 1].kind).toBe("example");
+
+    // Several consecutive help requests later the records STILL have not
+    // moved: help is never a practice record (acceptance: 连续帮助三次).
+    expect(stores.events()).toHaveLength(0);
+    expect(await deps.mastery.get(conceptId)).toBeNull();
+    expect(await deps.reviews.getCard(conceptId)).toBeNull();
+
+    // Then ONE real answer moves records EXACTLY once — the help before it
+    // did not change the attempt's count or weight.
+    session = await answerCurrentStep(deps, session, 0);
+    expect(stores.events()).toHaveLength(1);
+    const mastery = await deps.mastery.get(conceptId);
+    expect(mastery?.evidenceCount).toBe(1);
+    expect((await deps.reviews.getCard(conceptId))?.reps).toBe(1);
   });
 
   it("refuses help before content is delivered and after the step is answered", async () => {
