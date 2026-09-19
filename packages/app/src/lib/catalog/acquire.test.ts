@@ -14,6 +14,9 @@ const state = vi.hoisted(() => ({
   failed: [] as string[],
   opened: [] as string[],
   aImportGate: null as null | (() => void),
+  cleanupGate: null as null | (() => void),
+  cleanupCalled: 0,
+  holdCleanup: false,
 }));
 
 vi.mock("@readany/core/db", () => ({
@@ -48,7 +51,16 @@ vi.mock("@/lib/catalog/acquire-download", () => ({
     sha256: "sha",
     format: "epub" as const,
   })),
-  cleanupAcquireTempFile: vi.fn(async () => {}),
+  cleanupAcquireTempFile: vi.fn(async () => {
+    state.cleanupCalled += 1;
+    if (!state.holdCleanup) return;
+    // Deferrable so tests can hold the FINALIZATION window open after the
+    // import has returned (P2: cancel must be refused here too).
+    await new Promise<void>((resolve) => {
+      state.cleanupGate = resolve;
+    });
+    state.cleanupGate = null;
+  }),
   AcquireError: class extends Error {},
 }));
 
@@ -117,11 +129,14 @@ beforeEach(() => {
   state.failed.length = 0;
   state.opened.length = 0;
   state.aImportGate = null;
+  state.cleanupGate = null;
+  state.cleanupCalled = 0;
+  state.holdCleanup = false;
   importBooksMock.mockClear();
   vi.mocked(downloadAndVerifyCatalogFile).mockClear();
 });
 
-describe("acquire cancellation boundaries (F03)", () => {
+describe("acquire cancellation boundaries (F03 + P2)", () => {
   it("queued import does NOT import/ready/open after cancellation", async () => {
     const promiseA = acquireOnlineEdition(edition("edition-a"), t);
     // Wait until A is INSIDE importBooks (holding the single import slot).
@@ -180,5 +195,26 @@ describe("acquire cancellation boundaries (F03)", () => {
     const result = await promise;
     expect(result.status).toBe("opened");
     expect(state.finished).toContain("edition-a");
+  });
+
+  // Kept LAST and on its own edition id: a failure here leaves a pending
+  // promise (by design of the held cleanup), which must not poison the
+  // module-level inFlight state used by the tests above.
+  it("finalization window (import returned, cleanup pending) refuses cancel and still completes", async () => {
+    state.holdCleanup = true;
+    const promise = acquireOnlineEdition(edition("edition-fin"), t);
+    // Wait until importBooks has RETURNED: the finalization window (cleanup)
+    // is now open while finish/ready/open are still pending.
+    await vi.waitFor(() => expect(state.cleanupCalled).toBe(1));
+
+    // P2 REGRESSION (pre-fix): importingEditions was already deleted here, so
+    // cancelAcquire returned true while the task was still settling — a
+    // "cancelled" promise that keeps completing. It must be refused.
+    expect(cancelAcquire("edition-fin")).toBe(false);
+
+    state.cleanupGate?.();
+    const result = await promise;
+    expect(result.status).toBe("opened");
+    expect(state.finished).toContain("edition-fin");
   });
 });
