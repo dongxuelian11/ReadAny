@@ -376,31 +376,84 @@ ${body}
 function appendixXhtml(r) {
   const pct = (x) => `${(x * 100).toFixed(1)}%`;
   const num = (x, d = 2) => x.toFixed(d);
-  const code = `import numpy as np
-import pandas as pd
+  // The displayed snippet is the SAME algorithm as synthetic-backtest.mjs in
+  // pure-stdlib Python: same Mulberry32+Box–Muller random source, same seed,
+  // same initial price, same statistics window, same fee and annualization
+  // definitions. verify-pack.mjs extracts and RUNS it, then asserts its
+  // output matches the shipped table — the "copy to reproduce" claim is
+  // executed, not decorative.
+  const code = `import math
 
-FEE = 0.0005  # 单边手续费 0.05%（线性，示例假设）
+FEE = 0.0005          # 单边手续费 0.05%（线性，示例假设）
+N, S0, MU, SIGMA = 500, 100.0, 0.08, 0.20
+FAST, SLOW, DT = 20, 60, 1 / 252
 
-rng = np.random.default_rng(42)
-n_days, s0, mu, sigma = 500, 100.0, 0.08, 0.20
-ret = rng.normal((mu - sigma**2/2)/252, sigma/np.sqrt(252), n_days)
-price = s0 * np.exp(np.cumsum(ret))
+def mulberry32(seed):                 # 与构建脚本相同的随机源（纯标准库实现）
+    a = seed & 0xFFFFFFFF
+    def rand():
+        nonlocal a
+        a = (a + 0x6D2B79F5) & 0xFFFFFFFF
+        t = ((a ^ (a >> 15)) * (a | 1)) & 0xFFFFFFFF
+        t = (((t + (((t ^ (t >> 7)) * (t | 61)) & 0xFFFFFFFF)) & 0xFFFFFFFF) ^ t) & 0xFFFFFFFF
+        return ((t ^ (t >> 14)) & 0xFFFFFFFF) / 4294967296.0
+    return rand
 
-px = pd.Series(price)
-sma_fast, sma_slow = px.rolling(20).mean(), px.rolling(60).mean()
+rng = mulberry32(42)
+def gaussian():                       # 与构建脚本相同的 Box–Muller 变换
+    u = max(rng(), 1e-9)
+    v = rng()
+    return math.sqrt(-2.0 * math.log(u)) * math.cos(2.0 * math.pi * v)
 
-# 关键：信号在“次日”才执行（shift(1)），避免使用未来数据
-signal = (sma_fast > sma_slow).astype(int).shift(1).fillna(0)
-raw_ret = px.pct_change().fillna(0)
-turnover = signal.diff().abs().fillna(0)
-strat_ret = raw_ret * signal - turnover * FEE   # 净收益口径：费用计入每日收益
+price = [S0]
+for _ in range(1, N):                 # 与构建脚本相同的几何随机游走
+    price.append(price[-1] * math.exp((MU - SIGMA**2 / 2) * DT
+                                      + SIGMA * math.sqrt(DT) * gaussian()))
 
-equity = (1 + strat_ret).cumprod()
-bh = (1 + raw_ret).cumprod()
+def sma(w, i):                        # 窗口未满返回 None（与构建脚本一致）
+    return None if i + 1 < w else sum(price[i - w + 1:i + 1]) / w
 
-trades = int(turnover.sum())
-sharpe = strat_ret.mean()/strat_ret.std()*np.sqrt(252)
-max_dd = (equity/equity.cummax() - 1).min()   # 负值；下表按正数展示`;
+equity = bh_equity = 1.0
+peak = bh_peak = 1.0
+max_dd = bh_max_dd = 0.0
+strat_ret, bh_ret = [], []
+prev_exec = 0                         # 等价于 shift(1).fillna(0)
+trades = 0
+for i in range(1, N):
+    ret = price[i] / price[i - 1] - 1
+    fast, slow = sma(FAST, i - 1), sma(SLOW, i - 1)  # 用“昨日”均线：无未来数据
+    exec_sig = 1 if fast is not None and slow is not None and fast > slow else 0
+    turnover = abs(exec_sig - prev_exec)
+    trades += 1 if turnover > 0 else 0
+    net = ret * exec_sig - FEE * turnover   # 净口径：费用计入每日收益
+    strat_ret.append(net)
+    bh_ret.append(ret)                      # 买入持有：未扣手续费
+    equity *= 1 + net
+    peak = max(peak, equity)
+    max_dd = max(max_dd, 1 - equity / peak)
+    bh_equity *= 1 + ret
+    bh_peak = max(bh_peak, bh_equity)
+    bh_max_dd = max(bh_max_dd, 1 - bh_equity / bh_peak)
+    prev_exec = exec_sig
+
+def annualize(rs):                    # 与构建脚本同口径：均值×252、样本标准差×√252
+    m = sum(rs) / len(rs)
+    sd = math.sqrt(sum((x - m) ** 2 for x in rs) / (len(rs) - 1))
+    return m * 252, sd * math.sqrt(252)
+
+sm, ss = annualize(strat_ret)
+bm, bs = annualize(bh_ret)
+
+print(f"策略累计净值（费用后）: {equity:.6f}")
+print(f"策略年化收益: {sm:+.6%}")
+print(f"策略年化波动: {ss:.6%}")
+print(f"策略夏普比率: {sm / ss:+.6f}")
+print(f"策略最大回撤: {max_dd:.6%}")
+print(f"买入持有累计净值（未扣手续费）: {bh_equity:.6f}")
+print(f"买入持有年化收益: {bm:+.6%}")
+print(f"买入持有年化波动: {bs:.6%}")
+print(f"买入持有夏普比率: {bm / bs:+.6f}")
+print(f"买入持有最大回撤: {bh_max_dd:.6%}")
+print(f"调仓次数: {trades}")`;
 
   // Every cell carries its machine value so verify-pack.mjs can re-compute
   // the backtest and assert the shipped numbers match (non-zero exit on
@@ -412,7 +465,8 @@ max_dd = (equity/equity.cummax() - 1).min()   # 负值；下表按正数展示`;
 <section class="appendix-note">
   <p><strong>本章为 ReadAny 自创的对照示例</strong>，不属于 Datawhale 原作内容，数据为固定种子（42）生成的合成行情，
   仅供理解第3、4章中“信号时点、手续费、回撤”等概念，<strong>不构成任何收益承诺或投资建议</strong>。
-  下表全部指标来自<strong>同一份扣费后的每日收益序列</strong>；信号在次日执行（shift(1)），统计与展示口径一致。</p>
+  下表全部指标来自<strong>同一份扣费后的每日收益序列</strong>；信号在次日执行（shift(1)），统计与展示口径一致。
+  <strong>买入持有列未扣手续费</strong>；年化收益按日收益算术均值×252 计算，<strong>不是</strong>复利年化（CAGR）。</p>
 </section>
 
 <h2>为什么需要合成数据对照</h2>
@@ -420,15 +474,16 @@ max_dd = (equity/equity.cummax() - 1).min()   # 负值；下表按正数展示`;
 适合用来<strong>核对回测里最容易犯的三个错误</strong>：使用了未来数据（信号未右移）、
 费用只改净值不改收益序列、以及展示代码与计算实现各算各的。</p>
 
-<h2>示例代码（静态展示）</h2>
-<div class="codeblock"><div class="codelabel">示例代码（Python，静态展示，不可执行）</div><pre><code>${escapeXml(code)}</code></pre></div>
+<h2>示例代码（可直接运行）</h2>
+<div class="codeblock"><div class="codelabel">示例代码（Python 3，仅标准库，复制到任意 Python 3 环境即可运行）</div><pre><code>${escapeXml(code)}</code></pre></div>
 
-<h2>本机构建时的实际运行结果</h2>
-<p>构建脚本与展示代码使用同一套语义（固定种子 42，${r.days} 个交易日，年化波动 20% 的设定），
-结果如下——数字本身没有意义，<strong>方法上的差别</strong>才有意义：</p>
+<h2>同一段算法，两种语言，同一张表</h2>
+<p>构建脚本（JavaScript）与上面的展示代码（Python）使用<strong>同一随机源</strong>（seed=42 的 Mulberry32 + Box–Muller）、
+同一初始价格与统计区间（${r.days} 个交易日，年化波动 20% 的设定）、同一费用与年化口径。
+复制运行展示代码，得到的就是下表（浮点误差内一致）——数字本身没有意义，<strong>方法上的差别</strong>才有意义：</p>
 
 <table>
-  <thead><tr><th>指标</th><th>均线策略（费用后，净口径）</th><th>买入持有</th></tr></thead>
+  <thead><tr><th>指标</th><th>均线策略（费用后，净口径）</th><th>买入持有（未扣手续费）</th></tr></thead>
   <tbody>
     <tr><td>累计收益（全期）</td><td>${cell("strategyTotal", r.strategyTotal, pct(r.strategyTotal - 1))}</td><td>${cell("bhTotal", r.bhTotal, pct(r.bhTotal - 1))}</td></tr>
     <tr><td>年化收益</td><td>${cell("strategyAnnRet", r.strategyAnnRet, pct(r.strategyAnnRet))}</td><td>${cell("bhAnnRet", r.bhAnnRet, pct(r.bhAnnRet))}</td></tr>
@@ -441,8 +496,8 @@ max_dd = (equity/equity.cummax() - 1).min()   # 负值；下表按正数展示`;
 
 <h2>请核对的三件事</h2>
 <ol>
-  <li><strong>信号时点</strong>：代码中 <code>signal.shift(1)</code> —— 今天收盘算出的信号，明天才执行。删掉 shift 再跑一遍，结果会明显变好，但那是“偷看未来”，不可信。</li>
-  <li><strong>费用口径</strong>：费用从每日收益里扣（<code>strat_ret</code> 本身是净收益），累计净值、年化、夏普、回撤全部来自同一序列——不存在“净值扣了费、收益率还是毛的”的错位。</li>
+  <li><strong>信号时点</strong>：代码中 <code>prev_exec</code>（等价于 <code>signal.shift(1)</code>）—— 今天收盘算出的信号，明天才执行。删掉这个延迟再跑一遍，结果会明显变好，但那是“偷看未来”，不可信。</li>
+  <li><strong>费用口径</strong>：费用从每日收益里扣（<code>net</code> 本身是净收益），累计净值、年化、夏普、回撤全部来自同一序列——不存在“净值扣了费、收益率还是毛的”的错位。</li>
   <li><strong>样本内外</strong>：合成数据上的“好看”不等于真实市场有效；真实数据上应划分样本外区间再评估。</li>
 </ol>
 <p class="dynnote">本例使用 A 股之外无涨跌停限制的简化假设；具体市场规则请以官方资料为准。</p>`;

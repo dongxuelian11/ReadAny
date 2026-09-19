@@ -85,6 +85,32 @@ jobs:
         # tsc/vite build does not execute tests. Reuses the workspace vitest.
         run: pnpm --filter app exec vitest run --config vitest.config.ts
 
+      - name: Set up Python for the quant display-code reproduction check
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Quant pack verification (appendix numbers + runnable display code)
+        # LEARN-01 appendix followup: when the quant scripts or the shipped
+        # content pack change, run the existing verify-pack — it re-computes
+        # the appendix numbers, checks the visible cells, and EXECUTES the
+        # Python snippet from the built EPUB against them.
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "pull_request") {
+            $range = "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}"
+          } else {
+            $range = "origin/main...HEAD"
+          }
+          $changed = git diff --name-only $range -- "scripts/quant/" "packages/app/src-tauri/resources/catalog-seed/"
+          if ($changed) {
+            Write-Host "Quant pack inputs changed; running verify-pack"
+            node scripts/quant/verify-pack.mjs
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } else {
+            Write-Host "No quant pack input changes; verify-pack skipped"
+          }
+
       - name: Typecheck and frontend production build
         run: pnpm build
 

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "builtAt": "2026-09-19T03:03:19.673Z",
-  "seededAt": "2026-09-19T03:03:19.704Z",
+  "builtAt": "2026-09-19T09:51:41.625Z",
+  "seededAt": "2026-09-19T09:51:41.644Z",
   "counts": {
     "totalEditions": 10359,
     "bundled": 15,
@@ -31,8 +31,8 @@
       "catalogEditionId": "curated:quant-for-beginners-zh",
       "file": "quant-for-beginners-zh.epub",
       "format": "epub",
-      "sha256": "878c146e2bf1e352b546bda6ccb31122b5a4ebc43696b12e982206387017cf2d",
-      "sizeBytes": 5117335,
+      "sha256": "4ba98c180a87bae3640a200c37c02fbb1c58b78eb97859155bbd5fd27bc80766",
+      "sizeBytes": 5118267,
       "licenseId": "MIT",
       "verifiedAt": "2026-09-19"
     },
@@ -146,7 +146,7 @@
     }
   ],
   "db": {
-    "sha256": "2f2d42a9fd9963e6ce5c4f8f7687f68b92564c33a9175753f9f00df50c2eecf9",
+    "sha256": "4fa487e2a91bc7002f460caccb761766a53dbd3340c8fe4a19c727db3b92ee16",
     "sizeBytes": 23117824
   }
 }
