@@ -12,15 +12,21 @@ import type { LearnerConceptState } from "./goal";
 import { getLearnerStateAt } from "./read-model";
 import {
   type ChapterTextProvider,
+  TEACHING_HELP_VARIANTS_MAX,
+  TEACHING_STUCK_NOTE_MAX,
+  type TeachingHelpRequest,
   type TeachingLlmClient,
   type TeachingSession,
   type TeachingStep,
   currentTeachingStep,
+  describeLearnerBasis,
   generateTeachingContent,
+  generateTeachingHelp,
+  selectSourceWindow,
   sessionIsComplete,
   teachingEvidence,
 } from "./teaching";
-import type { TeachingContent } from "./teaching";
+import type { SourceWindow, TeachingContent, TeachingHelpVariant } from "./teaching";
 import type { TeachingStore } from "./teaching-store";
 import type { LearnerClock } from "./types";
 import { withLearnerWriteLock } from "./write-lock";
@@ -81,6 +87,9 @@ export async function startTeachingSession(
       conceptId: step.conceptId,
       title: step.title,
       action: step.action,
+      // LEARN-01: the goal's depth travels with the step so the prompt can
+      // pitch to the target instead of defaulting to "from scratch".
+      depth: step.depth,
       content: null,
       answered: false,
       correct: null,
@@ -124,13 +133,39 @@ export async function getActiveTeachingSession(
   return global && global.bookId === bookId && global.status === "active" ? global : null;
 }
 
+/** The honest learner-context sentence for one step: mastery status, a
+ * handful of recent attempts (never the whole history), and the step's target
+ * depth. Unknown basis is never asserted as zero basis. Failures degrade to
+ * "no context" — context is additive, never load-bearing. */
+async function buildLearnerContext(
+  deps: TeachingEngineDeps,
+  step: TeachingStep,
+): Promise<string | undefined> {
+  try {
+    const [entry] = await getLearnerStateAt(deps, [step.conceptId]);
+    let recent: Array<{ result: string }> = [];
+    try {
+      recent = (await deps.evidence.listByConcept(step.conceptId)).slice(-5);
+    } catch {
+      // Recent attempts are additive context only.
+    }
+    return describeLearnerBasis({ state: entry?.state ?? null, recent, depth: step.depth ?? null });
+  } catch {
+    return undefined;
+  }
+}
+
 /** Generate the content for the current step (idempotent: cached content is
  * returned as-is so a re-render never re-bills the model). Fail-closed with an
- * honest per-step error when generation fails after one retry. */
+ * honest per-step error when generation fails after one retry. LEARN-01:
+ * `focusExcerpt` anchors the source window on the passage the learner is
+ * actually looking at, so a long chapter is not always taught from its head;
+ * partial coverage is recorded on the content. */
 export async function deliverCurrentStep(
   deps: TeachingEngineDeps,
   session: TeachingSession,
   bookTitle: string,
+  options?: { focusExcerpt?: string | null },
 ): Promise<TeachingSession> {
   if (session.status !== "active") throw new Error("The teaching session is not active");
   if (sessionIsComplete(session)) throw new Error("The teaching session is already complete");
@@ -139,20 +174,8 @@ export async function deliverCurrentStep(
   if (step.content) return session;
 
   const chapterText = await deps.chapterText(step.conceptId);
-  // Honest learner context for the prompt: mastery status and prior evidence
-  // for THIS concept (from the same read model the UI shows). English
-  // difficulty must never be read as zero domain ability.
-  let learnerContext: string | undefined;
-  try {
-    const [entry] = await getLearnerStateAt(deps, [step.conceptId]);
-    const row = entry?.state ?? null;
-    learnerContext =
-      row && row.evidenceCount > 0
-        ? `${row.evidenceCount} prior attempt(s) on this concept, mastery ${(row.mastery * 100).toFixed(0)}%, status ${row.status} — pitch depth accordingly`
-        : "first exposure to this concept — start from zero domain knowledge";
-  } catch {
-    learnerContext = undefined;
-  }
+  const window = selectSourceWindow({ chapterText, focus: options?.focusExcerpt ?? null });
+  const learnerContext = await buildLearnerContext(deps, step);
   let content: TeachingContent;
   try {
     content = await generateTeachingContent({
@@ -162,12 +185,19 @@ export async function deliverCurrentStep(
       llm: deps.llm,
       learningLanguage: deps.learningLanguage,
       learnerContext,
+      sourceWindow: window,
     });
   } catch (error) {
     throw new TeachingStepFailedError(
       step.conceptId,
       error instanceof Error ? error.message : String(error),
     );
+  }
+  if (window.start > 0 || window.end < window.total) {
+    content = {
+      ...content,
+      source: { start: window.start, end: window.end, total: window.total },
+    };
   }
 
   // Late-generation guard (WP-A, F05): the model result must never write an
@@ -186,6 +216,101 @@ export async function deliverCurrentStep(
       ...stored,
       steps: stored.steps.map((entry) =>
         entry.conceptId === step.conceptId ? { ...entry, content } : entry,
+      ),
+    };
+    await deps.teachings.put(updated);
+    return updated;
+  });
+}
+
+/** LEARN-01: ask for help on the CURRENT step — a simpler explanation, a
+ * different example, or a re-explanation of the learner's stated sticking
+ * point. The response is attached to the step as a bounded help variant:
+ *   - the issued check question and its answer key are NEVER sent to the
+ *     model and never modified;
+ *   - no evidence event is written — help is not a practice record, so BKT/
+ *     FSRS/evidence stay untouched;
+ *   - the guarded write (same pattern as content delivery) means a response
+ *     that arrives after the step was answered, advanced, or superseded is
+ *     dropped, never written over the newer state.
+ * Returns the stored session unchanged when the late-write guard dropped the
+ * variant (the caller compares currentIndex to detect this). */
+export async function requestTeachingHelp(
+  deps: TeachingEngineDeps,
+  params: {
+    bookTitle: string;
+    session: TeachingSession;
+    help: TeachingHelpRequest;
+    focusExcerpt?: string | null;
+  },
+): Promise<TeachingSession> {
+  const { session } = params;
+  if (session.status !== "active") throw new Error("The teaching session is not active");
+  if (session.currentIndex !== params.session.currentIndex) {
+    throw new SessionStaleError(session.id);
+  }
+  const step = currentTeachingStep(session);
+  if (!step) throw new Error("The teaching session has no current step");
+  const content = step.content;
+  if (!content) throw new Error("Deliver the step content before requesting help");
+  if (step.answered) throw new Error("The current step was already answered");
+  // Fail fast on a stale snapshot (before any LLM call): the authoritative
+  // answered/advanced state lives in the store — never bill a help call the
+  // write guard would drop anyway.
+  const storedNow = await deps.teachings.get(session.id);
+  if (storedNow) {
+    if (storedNow.status !== "active" || storedNow.currentIndex !== session.currentIndex) {
+      throw new SessionStaleError(session.id);
+    }
+    const storedStep = storedNow.steps.find((entry) => entry.conceptId === step.conceptId);
+    if (storedStep?.answered) throw new Error("The current step was already answered");
+  }
+  const requestIndex = session.currentIndex;
+
+  const chapterText = await deps.chapterText(step.conceptId);
+  const window: SourceWindow = selectSourceWindow({
+    chapterText,
+    focus: params.focusExcerpt ?? null,
+  });
+  const learnerContext = await buildLearnerContext(deps, step);
+  const draft = await generateTeachingHelp({
+    bookTitle: params.bookTitle,
+    chapterTitle: step.title,
+    chapterText,
+    learningLanguage: deps.learningLanguage,
+    help: params.help,
+    originalExplanation: content.explanation,
+    originalExample: content.workedExample,
+    learnerContext,
+    sourceWindow: window,
+    llm: deps.llm,
+  });
+  const variant: TeachingHelpVariant = {
+    id: crypto.randomUUID(),
+    kind: params.help.kind,
+    note: params.help.note?.trim()
+      ? params.help.note.trim().slice(0, TEACHING_STUCK_NOTE_MAX)
+      : null,
+    text: draft.explanation,
+    example: draft.example,
+    createdAt: deps.clock.now().getTime(),
+    source:
+      window.start > 0 || window.end < window.total
+        ? { start: window.start, end: window.end, total: window.total }
+        : null,
+  };
+
+  return withLearnerWriteLock(async () => {
+    const stored = await deps.teachings.get(session.id);
+    if (!stored || stored.status !== "active") return stored ?? session;
+    if (stored.currentIndex !== requestIndex) return stored;
+    const target = stored.steps.find((entry) => entry.conceptId === step.conceptId);
+    if (!target || target.answered) return stored;
+    const variants = [...(target.helpVariants ?? []), variant].slice(-TEACHING_HELP_VARIANTS_MAX);
+    const updated: TeachingSession = {
+      ...stored,
+      steps: stored.steps.map((entry) =>
+        entry.conceptId === step.conceptId ? { ...entry, helpVariants: variants } : entry,
       ),
     };
     await deps.teachings.put(updated);

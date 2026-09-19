@@ -1,4 +1,5 @@
-﻿import { Button } from "@/components/ui/button";
+﻿import { TeachingHelpSection, sourceCoverageLabel } from "@/components/reader/TeachingHelpSection";
+import { Button } from "@/components/ui/button";
 import {
   getCurriculumForGoal,
   getGoalWorkspace,
@@ -22,6 +23,8 @@ import {
   deliverTeachingStep,
   startTeachingForBook,
 } from "@/lib/learner/teaching-trigger";
+import { boundedFocusExcerpt, useTeachingHelp } from "@/lib/learner/use-teaching-help";
+import type { TeachingHelpController } from "@/lib/learner/use-teaching-help";
 import { useSettingsStore } from "@/stores/settings-store";
 import {
   currentPlacementItem,
@@ -54,6 +57,10 @@ import { useTranslation } from "react-i18next";
 interface LearnerPanelProps {
   book: Book;
   onNavigateToChapter: (chapterIndex: number) => void;
+  /** LEARN-01: the reader's live position — the chapter being read and the
+   * selected passage, if any. Anchors teaching/help context on what the
+   * learner is actually looking at instead of always the chapter head. */
+  readerFocus?: { chapterIndex: number; selectedText: string } | null;
 }
 
 const STATUS_CHIP_CLASS: Record<MasteryStatus, string> = {
@@ -72,7 +79,7 @@ function chapterIndexFromConceptId(conceptId: string): number | null {
   return match ? Number(match[1]) : null;
 }
 
-export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
+export function LearnerPanel({ book, onNavigateToChapter, readerFocus }: LearnerPanelProps) {
   const { t } = useTranslation();
   const [state, dispatch] = useReducer(learnerPanelReducer, initialLearnerPanelState);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
@@ -194,6 +201,31 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
     loadReview,
   ]);
 
+  // LEARN-01: the reader's selected passage, usable as context ONLY when it
+  // belongs to the taught step's own chapter — a selection from another
+  // chapter must not leak into this step's prompt.
+  const focusExcerptFor = useCallback(
+    (conceptId: string | null): string | null => {
+      if (!readerFocus) return null;
+      if (conceptId) {
+        const chapter = chapterIndexFromConceptId(conceptId);
+        if (chapter !== null && chapter !== readerFocus.chapterIndex) return null;
+      }
+      return boundedFocusExcerpt(readerFocus.selectedText);
+    },
+    [readerFocus],
+  );
+
+  // LEARN-01 help flow (讲简单些 / 换个例子 / 我卡在这里): request-generation
+  // guarded, separate HELP actions, no learning-record side effects.
+  const help = useTeachingHelp({
+    book,
+    state,
+    dispatch,
+    aiConfigured: Boolean(aiConfig.activeModel),
+    getFocusExcerpt: focusExcerptFor,
+  });
+
   const handleCreateGoal = async (goalText: string) => {
     if (!aiConfig.activeModel) {
       dispatch({ type: "GOAL_ERROR", error: t("learnerPanel.noAiConfig") });
@@ -239,7 +271,9 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
       // generating the first step so a generation failure leaves a resumable
       // session 鈥?the error card's retry re-delivers instead of no-oping.
       dispatch({ type: "TEACHING_STARTED", session });
-      const delivered = await deliverTeachingStep(bookRef.current, session);
+      const delivered = await deliverTeachingStep(bookRef.current, session, {
+        focusExcerpt: focusExcerptFor(session.steps[session.currentIndex]?.conceptId ?? null),
+      });
       dispatch({ type: "TEACHING_DELIVERED", session: delivered });
     } catch (error) {
       dispatch({
@@ -253,7 +287,11 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
     if (!state.teaching) return;
     dispatch({ type: "TEACHING_DELIVERING" });
     try {
-      const session = await deliverTeachingStep(bookRef.current, state.teaching);
+      const session = await deliverTeachingStep(bookRef.current, state.teaching, {
+        focusExcerpt: focusExcerptFor(
+          state.teaching.steps[state.teaching.currentIndex]?.conceptId ?? null,
+        ),
+      });
       dispatch({ type: "TEACHING_DELIVERED", session });
     } catch (error) {
       dispatch({
@@ -578,6 +616,7 @@ export function LearnerPanel({ book, onNavigateToChapter }: LearnerPanelProps) {
             onAnswerStep={handleAnswerStep}
             onOpenTab={(tab) => dispatch({ type: "TAB_CHANGED", tab })}
             onNavigateToChapter={onNavigateToChapter}
+            help={help}
           />
         )}
         {state.tab === "placement" && (
@@ -1146,6 +1185,7 @@ function GoalTab({
   onAnswerStep,
   onOpenTab,
   onNavigateToChapter,
+  help,
 }: {
   state: ReturnType<typeof learnerPanelReducer>;
   onCreateGoal: (goalText: string) => void;
@@ -1155,6 +1195,7 @@ function GoalTab({
   onAnswerStep: (selectedOption: number) => void;
   onOpenTab: (tab: LearnerTab) => void;
   onNavigateToChapter: (chapterIndex: number) => void;
+  help: TeachingHelpController;
 }) {
   const { t } = useTranslation();
   const [draftGoal, setDraftGoal] = useState("");
@@ -1358,6 +1399,8 @@ function GoalTab({
               setSelectedOption(null);
             }}
             onOpenTab={onOpenTab}
+            help={help}
+            onNavigateToChapter={onNavigateToChapter}
           />
         </div>
       )}
@@ -1375,6 +1418,8 @@ function TeachingSection({
   onDeliverStep,
   onAnswerStep,
   onOpenTab,
+  onNavigateToChapter,
+  help,
 }: {
   state: ReturnType<typeof learnerPanelReducer>;
   teachingView: ReturnType<typeof currentTeachingStepView>;
@@ -1385,6 +1430,8 @@ function TeachingSection({
   onDeliverStep: () => void;
   onAnswerStep: (selectedOption: number) => void;
   onOpenTab: (tab: LearnerTab) => void;
+  onNavigateToChapter: (chapterIndex: number) => void;
+  help: TeachingHelpController;
 }) {
   const { t } = useTranslation();
   const phase = state.teachingPhase;
@@ -1520,6 +1567,12 @@ function TeachingSection({
         <p className="mt-2 whitespace-pre-line text-xs leading-5 text-foreground/90">
           {content.explanation}
         </p>
+        {content.source &&
+          (content.source.start > 0 || content.source.end < content.source.total) && (
+            <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
+              {sourceCoverageLabel(content.source, t)}
+            </p>
+          )}
         {content.keyPoints.length > 0 && (
           <ul className="mt-2 space-y-1">
             {content.keyPoints.map((point) => (
@@ -1538,6 +1591,20 @@ function TeachingSection({
             {content.workedExample}
           </blockquote>
         )}
+
+        {/* LEARN-01: the help area sits between the explanation and the check
+            question — the issued question and its answer key stay fixed and
+            untouched below it. */}
+        <TeachingHelpSection
+          variants={help.variants}
+          phase={help.helpPhase}
+          error={help.helpError}
+          disabled={!help.aiConfigured}
+          onRequest={help.requestHelp}
+          chapterIndex={chapterIndexFromConceptId(step.conceptId)}
+          onNavigateToChapter={onNavigateToChapter}
+        />
+
         <p className="mt-3 text-sm font-medium leading-6">{content.check.prompt}</p>
         <div className="mt-2 grid gap-2">
           {content.check.options.map((option, index) => (

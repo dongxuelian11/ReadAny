@@ -39,6 +39,12 @@ export type LearnerTeachingPhase =
   | "completed"
   | "error";
 
+/** LEARN-01 help-request phases. Deliberately separate from the teaching
+ * phase: a help request must never clobber the teaching flow (its content,
+ * its verdicts, or its error state), and a teaching transition must reset
+ * stale help state. */
+export type LearnerHelpPhase = "idle" | "loading" | "error";
+
 /** Bounded due-review flow (iter-2): a small queue of due concepts, walked one
  * item at a time through the same generate 鈫?answer 鈫?evidence path as
  * teaching. Deliberately not persisted: a crash mid-review just leaves that
@@ -100,6 +106,11 @@ export interface LearnerPanelState {
    * the verdict itself. */
   lastAnsweredView: { step: TeachingStep; content: TeachingContent } | null;
   teachingError: string | null;
+  // LEARN-01 help flow: loading/error of the CURRENT step's help request.
+  // The variants themselves live on the persisted step (helpVariants), so a
+  // restart still shows the saved re-explanations.
+  helpPhase: LearnerHelpPhase;
+  helpError: string | null;
   // Bounded due-review flow (iter-2)
   reviewRunPhase: LearnerReviewPhase;
   reviewSession: LearnerReviewSession | null;
@@ -153,6 +164,12 @@ export type LearnerPanelAction =
       answeredContent: TeachingContent;
     }
   | { type: "TEACHING_FAILED"; error: string }
+  /** LEARN-01 help actions. They only touch helpPhase/helpError (and the
+   * delivered session itself); the teaching phase, verdicts, and error state
+   * stay exactly as they are. */
+  | { type: "TEACHING_HELP_REQUEST" }
+  | { type: "TEACHING_HELP_DELIVERED"; session: TeachingSession }
+  | { type: "TEACHING_HELP_FAILED"; error: string }
   | { type: "CURRICULUM_REFRESHED"; curriculum: PersonalCurriculum }
   | { type: "REVIEW_START"; conceptIds: string[] }
   | { type: "REVIEW_DELIVERING" }
@@ -199,6 +216,8 @@ export const initialLearnerPanelState: LearnerPanelState = {
   lastStepAnswer: null,
   lastAnsweredView: null,
   teachingError: null,
+  helpPhase: "idle",
+  helpError: null,
   reviewRunPhase: "idle",
   reviewSession: null,
   reviewItem: null,
@@ -351,6 +370,10 @@ export function learnerPanelReducer(
         // delivered step must render its own content, not stale feedback.
         lastStepAnswer: null,
         lastAnsweredView: null,
+        // A new step starts with clean help state; old variants live on their
+        // own (previous) steps.
+        helpPhase: "idle",
+        helpError: null,
       };
     case "TEACHING_ANSWERING":
       return { ...state, teachingPhase: "answering", teachingError: null };
@@ -363,9 +386,25 @@ export function learnerPanelReducer(
         // Snapshot of the answered step's delivered content: the feedback card
         // renders from this, not from the (now advanced, content-less) view.
         lastAnsweredView: { step: action.answeredStep, content: action.answeredContent },
+        // The step is done: drop any in-flight help state with it.
+        helpPhase: "idle",
+        helpError: null,
       };
     case "TEACHING_FAILED":
       return { ...state, teachingPhase: "error", teachingError: action.error };
+    case "TEACHING_HELP_REQUEST":
+      return { ...state, helpPhase: "loading", helpError: null };
+    case "TEACHING_HELP_DELIVERED":
+      return {
+        ...state,
+        teaching: action.session,
+        helpPhase: "idle",
+        helpError: null,
+      };
+    case "TEACHING_HELP_FAILED":
+      // The original explanation and the pending check stay untouched and
+      // readable — only the help card reports the failure.
+      return { ...state, helpPhase: "error", helpError: action.error };
     case "CURRICULUM_REFRESHED":
       // Re-computed against live learner state (e.g. before a reteach); does
       // not touch the teaching flow itself.

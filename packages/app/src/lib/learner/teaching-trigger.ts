@@ -16,10 +16,11 @@ import {
   answerCurrentStep as coreAnswerCurrentStep,
   deliverCurrentStep as coreDeliverCurrentStep,
   getActiveTeachingSession as coreGetActiveTeachingSession,
+  requestTeachingHelp as coreRequestTeachingHelp,
   startTeachingSession as coreStartTeachingSession,
   createSqliteLearnerStores,
 } from "@readany/core/learner";
-import type { TeachingLlmClient } from "@readany/core/learner";
+import type { TeachingHelpKind, TeachingLlmClient } from "@readany/core/learner";
 import type { PersonalCurriculum, TeachingSession } from "@readany/core/learner";
 import type { Book } from "@readany/core/types";
 import { createInvokeLearnerAtomicCommit } from "./atomic-commit";
@@ -91,12 +92,37 @@ export async function startTeachingForBook(
   return coreStartTeachingSession(await createTeachingGenerationDeps(book), curriculum);
 }
 
-/** Generate content for the current step (idempotent per step). */
+/** Generate content for the current step (idempotent per step). LEARN-01:
+ * `focusExcerpt` — the learner's selected passage in THIS chapter — anchors
+ * the prompt's source window so a long chapter is not always taught from its
+ * head; pass null to keep the default head window. */
 export async function deliverTeachingStep(
   book: Book,
   session: TeachingSession,
+  options?: { focusExcerpt?: string | null },
 ): Promise<TeachingSession> {
-  return coreDeliverCurrentStep(await createTeachingGenerationDeps(book), session, book.meta.title);
+  return coreDeliverCurrentStep(
+    await createTeachingGenerationDeps(book),
+    session,
+    book.meta.title,
+    options,
+  );
+}
+
+/** LEARN-01: ask for help on the current step (simpler / different example /
+ * stuck). Generation-only deps; the core refuses and guards stale writes, and
+ * no learning record is touched. */
+export async function requestTeachingHelpForBook(
+  book: Book,
+  session: TeachingSession,
+  params: { kind: TeachingHelpKind; note?: string | null; focusExcerpt?: string | null },
+): Promise<TeachingSession> {
+  return coreRequestTeachingHelp(await createTeachingGenerationDeps(book), {
+    bookTitle: book.meta.title,
+    session,
+    help: { kind: params.kind, note: params.note ?? null },
+    focusExcerpt: params.focusExcerpt ?? null,
+  });
 }
 
 /** Grade the current step's check and record evidence. The resumable engine

@@ -411,7 +411,27 @@
       "incorrect": "Not quite",
       "completed": "Teaching complete",
       "completedNote": "Every step is taught and answered. Mastery and review scheduling have recorded your answers.",
-      "viewMastery": "View mastery"
+      "viewMastery": "View mastery",
+      "help": {
+        "ask": "Stuck on this step? Ask for a different take:",
+        "simpler": "Explain more simply",
+        "example": "Different example",
+        "stuck": "I'm stuck here",
+        "stuckSend": "Send",
+        "stuckPlaceholder": "One line on where you're stuck (optional)",
+        "loading": "Preparing a new explanation…",
+        "failed": "Couldn't generate the help; the original explanation, question, and answer stay unchanged",
+        "boundaryNote": "A re-explanation never replaces the original question and is not counted as practice",
+        "noteQuoted": "Your sticking point: {{note}}",
+        "sourceFull": "Based on: the full chapter",
+        "sourcePartial": "Based on: about {{from}}%–{{to}}% of this chapter (the rest is not covered)",
+        "backToSource": "Back to this chapter",
+        "kind": {
+          "simpler": "Simpler explanation",
+          "example": "A different example",
+          "stuck": "About your sticking point"
+        }
+      }
     }
   }
 }

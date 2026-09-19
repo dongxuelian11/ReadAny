@@ -407,7 +407,27 @@
       "incorrect": "還不對",
       "completed": "帶讀完成",
       "completedNote": "每一步都已講完並作答。掌握度與複習安排已記錄你的答案。",
-      "viewMastery": "查看掌握度"
+      "viewMastery": "查看掌握度",
+      "help": {
+        "ask": "這一節沒跟上？換個講法：",
+        "simpler": "講簡單些",
+        "example": "換個例子",
+        "stuck": "我卡在這裡",
+        "stuckSend": "傳送",
+        "stuckPlaceholder": "一句話說說卡在哪裡（可留空）",
+        "loading": "正在準備新的講解…",
+        "failed": "協助產生失敗；原講解、題目和答案保持不變",
+        "boundaryNote": "換一種講法不會替換原題，也不計入練習記錄",
+        "noteQuoted": "你的卡點：{{note}}",
+        "sourceFull": "依據：本章原文",
+        "sourcePartial": "依據：本章約 {{from}}%–{{to}}%（未涵蓋其餘部分）",
+        "backToSource": "回到本章",
+        "kind": {
+          "simpler": "更簡單的講解",
+          "example": "換個例子",
+          "stuck": "針對你的卡點"
+        }
+      }
     }
   }
 }
