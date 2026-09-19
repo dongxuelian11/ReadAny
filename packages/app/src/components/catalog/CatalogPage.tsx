@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import {
   acquireOnlineEdition,
+  cancelAcquire,
   installAndOpenBundledBook,
   refreshAcquireTasks,
   subscribeAcquireTasks,
@@ -350,6 +351,7 @@ export function CatalogPage() {
                   onOpen={() => void openDetail(edition)}
                   onRead={() => void handleRead(edition)}
                   onDownload={() => void handleDownload(edition)}
+                  onCancel={() => cancelAcquire(edition.catalogEditionId)}
                 />
               ))}
             </div>
@@ -392,6 +394,7 @@ function CatalogCard({
   onOpen,
   onRead,
   onDownload,
+  onCancel,
 }: {
   edition: CatalogEdition;
   installing: boolean;
@@ -399,6 +402,7 @@ function CatalogCard({
   onOpen: () => void;
   onRead: () => void;
   onDownload: () => void;
+  onCancel: () => void;
 }) {
   const { t } = useTranslation();
   const displayTitle = edition.titleZh || edition.originalTitle;
@@ -487,17 +491,20 @@ function CatalogCard({
         {canDownload && (
           <button
             type="button"
-            disabled={downloading}
             className={cn(
               "rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors",
               task?.status === "failed"
                 ? "border-amber-500/50 text-amber-600 hover:bg-amber-500 hover:text-background dark:text-amber-400"
                 : "hover:bg-foreground hover:text-background",
-              downloading && "cursor-default opacity-70",
+              downloading && "cursor-pointer opacity-70",
             )}
-            title={task?.error}
+            title={downloading ? t("catalog.cancelDownload") : task?.error}
             onClick={(e) => {
               e.stopPropagation();
+              if (downloading) {
+                onCancel();
+                return;
+              }
               onDownload();
             }}
           >

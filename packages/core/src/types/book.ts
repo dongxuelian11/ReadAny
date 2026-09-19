@@ -50,6 +50,9 @@ export interface Book {
   currentCfi?: string; // EPUB CFI position or PDF page marker (e.g. "page-5")
   isVectorized: boolean;
   vectorizeProgress: number; // 0-1
+  /** KB-01/F03: last indexing failure message; empty/undefined = no failure.
+   * Persisted so "准备失败" survives restarts and can be retried. */
+  vectorizeError?: string;
   tags: string[];
   fileHash?: string;
   syncStatus: "local" | "remote" | "downloading"; // File availability status

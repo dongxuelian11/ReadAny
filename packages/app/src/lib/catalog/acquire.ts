@@ -97,6 +97,48 @@ const inFlightEditions = new Set<string>();
 const progressListeners = new Set<(tasks: Record<string, CatalogAcquireTask>) => void>();
 let tasksCache: Record<string, CatalogAcquireTask> = {};
 
+/**
+ * KB-01/F04: bounded global concurrency. The per-edition in-flight set above
+ * only prevents duplicate runs of the SAME edition; without a global cap a
+ * bulk batch could start unbounded parallel downloads (each buffering up to
+ * 200MiB in memory) and unbounded parallel imports. First version: 2 network
+ * downloads, 1 import/parse (imports are serialized so the same content
+ * downloaded via two editions dedupes into ONE library book instead of
+ * racing two importBooks calls).
+ */
+const MAX_CONCURRENT_DOWNLOADS = 2;
+const MAX_CONCURRENT_IMPORTS = 1;
+
+/** Cancellation handles per edition (cancelAcquire aborts the network phase). */
+const activeControllers = new Map<string, AbortController>();
+
+export function cancelAcquire(catalogEditionId: string): boolean {
+  const controller = activeControllers.get(catalogEditionId);
+  if (!controller) return false;
+  controller.abort(new Error("用户取消了下载"));
+  return true;
+}
+
+function makeSlot(maxRunning: number) {
+  let running = 0;
+  const waiters: Array<() => void> = [];
+  return async function run<T>(job: () => Promise<T>): Promise<T> {
+    while (running >= maxRunning) {
+      await new Promise<void>((resolve) => waiters.push(resolve));
+    }
+    running++;
+    try {
+      return await job();
+    } finally {
+      running--;
+      waiters.shift()?.();
+    }
+  };
+}
+
+const withDownloadSlot = makeSlot(MAX_CONCURRENT_DOWNLOADS);
+const withImportSlot = makeSlot(MAX_CONCURRENT_IMPORTS);
+
 export function subscribeAcquireTasks(
   listener: (tasks: Record<string, CatalogAcquireTask>) => void,
 ): () => void {
@@ -152,6 +194,9 @@ export async function acquireOnlineEdition(
     return { status: "failed", message: "downloading" };
   }
   inFlightEditions.add(editionId);
+  const controller = new AbortController();
+  activeControllers.set(editionId, controller);
+  let tempPath: string | null = null;
   try {
     await initDatabase();
     // Already acquired → open the linked book instead of re-downloading.
@@ -170,19 +215,31 @@ export async function acquireOnlineEdition(
     );
     await setTask(task, editionId);
 
-    const temp = await downloadAndVerifyCatalogFile(edition, (bytes, total) => {
-      const snapshot: CatalogAcquireTask = {
-        ...task,
-        status: "downloading",
-        bytesDownloaded: bytes,
-        totalBytes: total,
-      };
-      void setTask(snapshot, editionId);
-      updateCatalogAcquireProgress(editionId, bytes, total).catch(() => {});
-    });
+    // Global download slot (2) + cancellation: the abort signal reaches the
+    // real network fetch; a user cancel fails the task without fake progress.
+    const temp = await withDownloadSlot(() =>
+      downloadAndVerifyCatalogFile(
+        edition,
+        (bytes, total) => {
+          const snapshot: CatalogAcquireTask = {
+            ...task,
+            status: "downloading",
+            bytesDownloaded: bytes,
+            totalBytes: total,
+          };
+          void setTask(snapshot, editionId);
+          updateCatalogAcquireProgress(editionId, bytes, total).catch(() => {});
+        },
+        controller.signal,
+      ),
+    );
+    tempPath = temp.tempPath;
 
-    const result = await useLibraryStore.getState().importBooks([temp.tempPath]);
+    const result = await withImportSlot(() =>
+      useLibraryStore.getState().importBooks([temp.tempPath]),
+    );
     await cleanupAcquireTempFile(temp.tempPath);
+    tempPath = null;
 
     const book = result.imported[0] ?? result.skippedDuplicates[0]?.existingBook;
     if (!book) {
@@ -216,6 +273,9 @@ export async function acquireOnlineEdition(
     toast.error(`${t("catalog.acquireFailed", "获取失败")}: ${message}`);
     return { status: "failed", message };
   } finally {
+    // The staged temp file must never leak — even when importBooks threw.
+    if (tempPath) await cleanupAcquireTempFile(tempPath);
+    activeControllers.delete(editionId);
     inFlightEditions.delete(editionId);
   }
 }

@@ -180,6 +180,7 @@
     "vec_reindex": "Re-vectorize",
     "vec_reindexConfirm": "This book is already indexed. Re-indexing will reset the existing data. Continue?",
     "vec_indexed": "Indexed",
+    "vec_failed": "Index failed — retry",
     "vec_chunking": "Chunking...",
     "vec_indexing": "Indexing...",
     "vec_processing": "Processing...",
