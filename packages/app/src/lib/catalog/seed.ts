@@ -205,11 +205,16 @@ async function doEnsureCatalogSeeded(): Promise<CatalogSeedResult> {
         });
         if (swap.outcome === "promoted") {
           await remove(bakPath).catch(() => {});
+          // Markers only after the new snapshot verifiably took over.
+          await platform.kvSetItem(SEED_VERSION_KEY, String(CATALOG_SCHEMA_VERSION));
+          await platform.kvSetItem(SEED_BUILT_AT_KEY, manifest.builtAt);
+          installed = true;
         } else if (swap.outcome === "restored") {
-          // Old copy is back in place; markers stay stale so the next launch
-          // retries the refresh. Surface the real cause.
+          // Old copy is back in place. KB-01 followup/F02: markers MUST stay
+          // on the OLD values and installed stays false — otherwise the next
+          // launch believes the upgrade already happened and never retries.
           console.warn(
-            `[catalog] snapshot promote failed, old copy restored: ${swap.promoteError}`,
+            `[catalog] snapshot promote failed, old copy restored: ${swap.promoteError} — will retry next launch`,
           );
         } else {
           // Double failure: the .bak is the ONLY recoverable copy — never
@@ -220,11 +225,11 @@ async function doEnsureCatalogSeeded(): Promise<CatalogSeedResult> {
         }
       } else {
         await rename(tmpPath, dbPath);
+        // Fresh install: nothing to roll back, markers reflect the new seed.
+        await platform.kvSetItem(SEED_VERSION_KEY, String(CATALOG_SCHEMA_VERSION));
+        await platform.kvSetItem(SEED_BUILT_AT_KEY, manifest.builtAt);
+        installed = true;
       }
-      // Markers only after the replacement verifiably succeeded.
-      await platform.kvSetItem(SEED_VERSION_KEY, String(CATALOG_SCHEMA_VERSION));
-      await platform.kvSetItem(SEED_BUILT_AT_KEY, manifest.builtAt);
-      installed = true;
     } catch (err) {
       if (dbExists && (await exists(dbPath).catch(() => false))) {
         // The old copy is still in place — retry the upgrade on the next

@@ -361,6 +361,7 @@ export async function initDatabase(): Promise<void> {
       current_cfi TEXT,
       is_vectorized INTEGER DEFAULT 0,
       vectorize_progress REAL DEFAULT 0,
+      vectorize_error TEXT,
       tags TEXT DEFAULT '[]'
     )
   `);
@@ -651,6 +652,14 @@ export async function initDatabase(): Promise<void> {
         await database.execute(
           "ALTER TABLE books ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'local'",
         );
+      } catch {
+        // Column already exists
+      }
+
+      // Migration: persist the last indexing failure on the book (KB-01
+      // followup/F01) — nullable, local-only, cleared on retry.
+      try {
+        await database.execute("ALTER TABLE books ADD COLUMN vectorize_error TEXT");
       } catch {
         // Column already exists
       }

@@ -111,12 +111,24 @@ const MAX_CONCURRENT_IMPORTS = 1;
 
 /** Cancellation handles per edition (cancelAcquire aborts the network phase). */
 const activeControllers = new Map<string, AbortController>();
+/**
+ * KB-01 followup/F03: editions whose (irreversible) import has already
+ * started. cancelAcquire refuses these — aborting there would either kill a
+ * mid-write importer or promise a cancel that keeps completing.
+ */
+const importingEditions = new Set<string>();
 
 export function cancelAcquire(catalogEditionId: string): boolean {
+  if (importingEditions.has(catalogEditionId)) return false;
   const controller = activeControllers.get(catalogEditionId);
   if (!controller) return false;
   controller.abort(new Error("用户取消了下载"));
   return true;
+}
+
+/** True when this acquire was cancelled by the user before importing. */
+function wasCancelled(editionId: string): boolean {
+  return activeControllers.get(editionId)?.signal.aborted ?? false;
 }
 
 function makeSlot(maxRunning: number) {
@@ -235,9 +247,29 @@ export async function acquireOnlineEdition(
     );
     tempPath = temp.tempPath;
 
-    const result = await withImportSlot(() =>
-      useLibraryStore.getState().importBooks([temp.tempPath]),
-    );
+    // KB-01 followup/F03: last cancellation checkpoint BEFORE the irreversible
+    // import. A queued-and-cancelled task must not import, become ready, or
+    // open — the temp file is cleaned up in the finally below.
+    if (wasCancelled(editionId)) {
+      const message = t("catalog.acquireCancelled", "已取消下载");
+      const failedTask = { ...task, status: "failed" as const, error: message };
+      await failCatalogAcquireTask(editionId, message);
+      await setTask(failedTask, editionId);
+      await refreshAcquireTasks();
+      return { status: "failed", message };
+    }
+
+    const result = await withImportSlot(() => {
+      // Re-check at DEQUEUE: the task may have been cancelled while it waited
+      // for the import slot. Only after this check does the import become
+      // non-interruptible (cancelAcquire refuses).
+      if (wasCancelled(editionId)) {
+        throw new Error(t("catalog.acquireCancelled", "已取消下载"));
+      }
+      importingEditions.add(editionId);
+      return useLibraryStore.getState().importBooks([temp.tempPath]);
+    });
+    importingEditions.delete(editionId);
     await cleanupAcquireTempFile(temp.tempPath);
     tempPath = null;
 
@@ -267,6 +299,13 @@ export async function acquireOnlineEdition(
     return ok ? { status: "opened", bookId: book.id } : { status: "failed", message: "open" };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    if (wasCancelled(editionId)) {
+      // User-initiated cancel: fail the task honestly without an error toast.
+      const cancelMessage = t("catalog.acquireCancelled", "已取消下载");
+      await failCatalogAcquireTask(editionId, cancelMessage).catch(() => {});
+      await refreshAcquireTasks();
+      return { status: "failed", message: cancelMessage };
+    }
     console.error("[catalog] acquire failed:", err);
     await failCatalogAcquireTask(editionId, message).catch(() => {});
     await refreshAcquireTasks();
@@ -275,6 +314,7 @@ export async function acquireOnlineEdition(
   } finally {
     // The staged temp file must never leak — even when importBooks threw.
     if (tempPath) await cleanupAcquireTempFile(tempPath);
+    importingEditions.delete(editionId);
     activeControllers.delete(editionId);
     inFlightEditions.delete(editionId);
   }
