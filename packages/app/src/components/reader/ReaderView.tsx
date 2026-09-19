@@ -3351,7 +3351,16 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
-          <LearnerPanel book={book} onNavigateToChapter={handleNavigateToBookSkillChapter} />
+          <LearnerPanel
+            book={book}
+            onNavigateToChapter={handleNavigateToBookSkillChapter}
+            // LEARN-01: live reading position + selection anchor the teaching
+            // context on what the learner is actually looking at.
+            readerFocus={{
+              chapterIndex: readerTab.chapterIndex,
+              selectedText: readerTab.selectedText,
+            }}
+          />
         </aside>
       )}
 

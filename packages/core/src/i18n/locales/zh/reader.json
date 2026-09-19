@@ -411,7 +411,27 @@
       "incorrect": "还不对",
       "completed": "带读完成",
       "completedNote": "每一步都已讲完并作答。掌握度与复习安排已记录你的答案。",
-      "viewMastery": "查看掌握度"
+      "viewMastery": "查看掌握度",
+      "help": {
+        "ask": "这一节没跟上？换个讲法：",
+        "simpler": "讲简单些",
+        "example": "换个例子",
+        "stuck": "我卡在这里",
+        "stuckSend": "发送",
+        "stuckPlaceholder": "一句话说说卡在哪里（可留空）",
+        "loading": "正在准备新的讲解…",
+        "failed": "帮助生成失败；原讲解、题目和答案保持不变",
+        "boundaryNote": "换一种讲法不会替换原题，也不计入练习记录",
+        "noteQuoted": "你的卡点：{{note}}",
+        "sourceFull": "依据：本章原文",
+        "sourcePartial": "依据：本章约 {{from}}%–{{to}}%（未覆盖其余部分）",
+        "backToSource": "回到本章",
+        "kind": {
+          "simpler": "更简单的讲解",
+          "example": "换个例子",
+          "stuck": "针对你的卡点"
+        }
+      }
     }
   }
 }
