@@ -20,6 +20,7 @@ import { ReadSettingsPanel } from "@/components/settings/ReadSettings";
 import { useReadingSession } from "@/hooks/use-reading-session";
 import { useResizablePanel } from "@/hooks/use-resizable-panel";
 import { useResolvedSrc } from "@/hooks/use-resolved-src";
+import { getActiveTeaching } from "@/lib/learner/teaching-trigger";
 import { hasSeenReaderTour, startReaderTour } from "@/lib/reader-tour";
 import { DocumentLoader } from "@/lib/reader/document-loader";
 import type { BookDoc, BookFormat } from "@/lib/reader/document-loader";
@@ -34,11 +35,12 @@ import { useReaderStore } from "@/stores/reader-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useTTSStore } from "@/stores/tts-store";
 import { useChapterTranslation } from "@readany/core/hooks";
+import type { TeachingHelpKind } from "@readany/core/learner";
+import type { LearningCitation } from "@readany/core/learning";
 import { getPlatformService } from "@readany/core/services";
 import { getCSSFontFace, useFontStore, useReadingSessionStore } from "@readany/core/stores";
 import { useRubyStore } from "@readany/core/stores/ruby-store";
 import { splitNarrationText } from "@readany/core/tts";
-import type { LearningCitation } from "@readany/core/learning";
 import type { CitationPart, HighlightColor } from "@readany/core/types";
 import { eventBus } from "@readany/core/utils/event-bus";
 import { throttle } from "@readany/core/utils/throttle";
@@ -805,6 +807,15 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
   const [showLearning, setShowLearning] = useState(false);
   const [showBookSkill, setShowBookSkill] = useState(false);
   const [showLearnerPanel, setShowLearnerPanel] = useState(false);
+  // LEARN-01: the selection popover offers the teaching-help asks only while a
+  // guided-teaching session is active for THIS book; a click forwards the
+  // (kind, bookId) request into the learner panel's single help controller.
+  const [learnerHelpAvailable, setLearnerHelpAvailable] = useState(false);
+  const [learnerHelpRequest, setLearnerHelpRequest] = useState<{
+    kind: TeachingHelpKind;
+    bookId: string;
+    nonce: number;
+  } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showTTS, setShowTTS] = useState(false);
   const [isReimporting, setIsReimporting] = useState(false);
@@ -1864,6 +1875,36 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
   }, [selection, bookId, readerTab?.chapterTitle]);
 
   const handleCloseSelection = useCallback(() => setSelection(null), []);
+
+  // LEARN-01: refresh teaching availability whenever a selection opens (one
+  // book-scoped store read per selection gesture — cheap and never stale).
+  useEffect(() => {
+    if (!selection || !book) return;
+    let cancelled = false;
+    void getActiveTeaching(book)
+      .then((active) => {
+        if (!cancelled) setLearnerHelpAvailable(active?.status === "active");
+      })
+      .catch(() => {
+        if (!cancelled) setLearnerHelpAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selection, book?.id]);
+
+  const handleLearnerHelpFromSelection = useCallback(
+    (kind: TeachingHelpKind) => {
+      setSelection(null);
+      setShowChat(false);
+      setShowLearning(false);
+      setShowBookSkill(false);
+      setShowLearnerPanel(true);
+      setLearnerHelpRequest({ kind, bookId: bookId, nonce: Date.now() });
+    },
+    [bookId],
+  );
+
   const handleToggleSearch = useCallback(() => setShowSearch((p) => !p), []);
   const handleToggleToc = useCallback(() => setShowToc((p) => !p), []);
   const handleToggleChat = useCallback(() => {
@@ -3124,6 +3165,9 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
                 onAskAI={handleAskAI}
                 onSpeak={handleSpeakSelection}
                 onClose={handleCloseSelection}
+                learnerHelp={
+                  learnerHelpAvailable ? { onRequest: handleLearnerHelpFromSelection } : null
+                }
               />
             )}
 
@@ -3360,6 +3404,7 @@ export function ReaderView({ bookId, tabId }: ReaderViewProps) {
               chapterIndex: readerTab.chapterIndex,
               selectedText: readerTab.selectedText,
             }}
+            incomingHelpRequest={learnerHelpRequest}
           />
         </aside>
       )}

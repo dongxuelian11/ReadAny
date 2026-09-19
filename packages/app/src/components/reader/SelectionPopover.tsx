@@ -1,3 +1,4 @@
+import type { TeachingHelpKind } from "@readany/core/learner";
 import type { HighlightColor } from "@readany/core/types";
 import { HIGHLIGHT_COLORS, HIGHLIGHT_COLOR_HEX } from "@readany/core/types";
 import { cn } from "@readany/core/utils";
@@ -32,6 +33,9 @@ interface SelectionPopoverProps {
   onAskAI: () => void;
   onSpeak: () => void;
   onClose: () => void;
+  /** LEARN-01: present only while a guided-teaching session is active for this
+   * book — the row routes the SELECTION into the teaching help flow. */
+  learnerHelp?: { onRequest: (kind: TeachingHelpKind) => void } | null;
 }
 
 const POPOVER_MARGIN = 8;
@@ -51,6 +55,7 @@ export function SelectionPopover({
   onAskAI,
   onSpeak,
   onClose,
+  learnerHelp = null,
 }: SelectionPopoverProps) {
   const { t } = useTranslation();
   const [showColors, setShowColors] = useState(!isPdf);
@@ -187,6 +192,25 @@ export function SelectionPopover({
             </button>
           ))}
         </div>
+
+        {/* LEARN-01: route the selection into the guided-teaching help flow.
+            The selected passage becomes the help's source focus; the learner
+            panel opens and renders the response. */}
+        {learnerHelp && (
+          <div className="flex items-center gap-0.5 rounded-lg border border-border bg-background p-1 shadow-lg">
+            {(["simpler", "example", "stuck"] as const).map((kind) => (
+              <button
+                type="button"
+                key={kind}
+                className="rounded-md px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                title={t(`learnerPanel.teaching.help.kind.${kind}`)}
+                onClick={() => learnerHelp.onRequest(kind)}
+              >
+                {t(`learnerPanel.teaching.help.${kind}`)}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
