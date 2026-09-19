@@ -79,6 +79,12 @@ jobs:
       - name: Expo tests
         run: pnpm --filter @readany/app-expo test
 
+      - name: App tests
+        # KB-01 followup: the app-level regression suite (import persistence,
+        # catalog seed markers, acquire cancellation) must actually run in CI —
+        # tsc/vite build does not execute tests. Reuses the workspace vitest.
+        run: pnpm --filter app exec vitest run --config vitest.config.ts
+
       - name: Typecheck and frontend production build
         run: pnpm build
 

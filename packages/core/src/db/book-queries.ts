@@ -37,6 +37,7 @@ interface BookRow {
   current_cfi: string | null;
   is_vectorized: number;
   vectorize_progress: number;
+  vectorize_error: string | null;
   tags: string;
   file_hash: string | null;
   sync_status: string;
@@ -71,6 +72,7 @@ function rowToBook(row: BookRow): Book {
     currentCfi: row.current_cfi || undefined,
     isVectorized: row.is_vectorized === 1,
     vectorizeProgress: row.vectorize_progress,
+    vectorizeError: row.vectorize_error || undefined,
     tags: parseJSON(row.tags, []),
     fileHash: row.file_hash || undefined,
     syncStatus: (row.sync_status as Book["syncStatus"]) || "local",
@@ -169,42 +171,43 @@ export async function insertBook(book: Book): Promise<void> {
   const deviceId = await getDeviceId();
   const syncVersion = await nextSyncVersion(database, "books");
   const now = Date.now();
-  await database.execute(
-    `INSERT INTO books (id, file_path, format, title, author, publisher, language, isbn, description, cover_url, publish_date, rating, reviews, subjects, total_pages, total_chapters, group_id, added_at, last_opened_at, updated_at, deleted_at, progress, current_cfi, is_vectorized, vectorize_progress, tags, file_hash, sync_status, sync_version, last_modified_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      book.id,
-      book.filePath,
-      book.format || "epub",
-      book.meta.title,
-      book.meta.author,
-      book.meta.publisher || null,
-      book.meta.language || null,
-      book.meta.isbn || null,
-      book.meta.description || null,
-      book.meta.coverUrl || null,
-      book.meta.publishDate || null,
-      book.meta.rating || null,
-      book.meta.reviews?.length ? JSON.stringify(book.meta.reviews) : null,
-      book.meta.subjects ? JSON.stringify(book.meta.subjects) : null,
-      book.meta.totalPages || 0,
-      book.meta.totalChapters || 0,
-      book.groupId || null,
-      book.addedAt,
-      book.lastOpenedAt || null,
-      now,
-      book.deletedAt || null,
-      book.progress,
-      book.currentCfi || null,
-      book.isVectorized ? 1 : 0,
-      book.vectorizeProgress,
-      JSON.stringify(book.tags),
-      book.fileHash || null,
-      book.syncStatus || "local",
-      syncVersion,
-      deviceId,
-    ],
-  );
+    await database.execute(
+      `INSERT INTO books (id, file_path, format, title, author, publisher, language, isbn, description, cover_url, publish_date, rating, reviews, subjects, total_pages, total_chapters, group_id, added_at, last_opened_at, updated_at, deleted_at, progress, current_cfi, is_vectorized, vectorize_progress, vectorize_error, tags, file_hash, sync_status, sync_version, last_modified_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        book.id,
+        book.filePath,
+        book.format || "epub",
+        book.meta.title,
+        book.meta.author,
+        book.meta.publisher || null,
+        book.meta.language || null,
+        book.meta.isbn || null,
+        book.meta.description || null,
+        book.meta.coverUrl || null,
+        book.meta.publishDate || null,
+        book.meta.rating || null,
+        book.meta.reviews?.length ? JSON.stringify(book.meta.reviews) : null,
+        book.meta.subjects ? JSON.stringify(book.meta.subjects) : null,
+        book.meta.totalPages || 0,
+        book.meta.totalChapters || 0,
+        book.groupId || null,
+        book.addedAt,
+        book.lastOpenedAt || null,
+        now,
+        book.deletedAt || null,
+        book.progress,
+        book.currentCfi || null,
+        book.isVectorized ? 1 : 0,
+        book.vectorizeProgress,
+        book.vectorizeError ?? null,
+        JSON.stringify(book.tags),
+        book.fileHash || null,
+        book.syncStatus || "local",
+        syncVersion,
+        deviceId,
+      ],
+    );
 }
 
 export async function updateBook(id: string, updates: Partial<Book>): Promise<void> {
@@ -299,6 +302,12 @@ export async function updateBook(id: string, updates: Partial<Book>): Promise<vo
     sets.push("vectorize_progress = ?");
     values.push(updates.vectorizeProgress);
   }
+  // Explicit hasOwnProperty semantics: omitted = unchanged; undefined/null =
+  // CLEAR the error (retry start must be able to clear it — KB-01 followup/F01).
+  if (Object.prototype.hasOwnProperty.call(updates, "vectorizeError")) {
+    sets.push("vectorize_error = ?");
+    values.push(updates.vectorizeError ?? null);
+  }
   if (updates.tags !== undefined) {
     sets.push("tags = ?");
     values.push(JSON.stringify(updates.tags));
@@ -359,7 +368,7 @@ export async function deleteBook(id: string, options: DeleteBookOptions = {}): P
     const updatedAt = await nextUpdatedAt(database, "books", id);
     await database.execute(
       `UPDATE books
-       SET deleted_at = ?, is_vectorized = 0, vectorize_progress = 0,
+       SET deleted_at = ?, is_vectorized = 0, vectorize_progress = 0, vectorize_error = NULL,
            updated_at = ?, sync_version = ?, last_modified_by = ?
        WHERE id = ?`,
       [deletedAt, updatedAt, syncVersion, deviceId, id],

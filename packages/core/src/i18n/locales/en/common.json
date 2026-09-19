@@ -83,6 +83,7 @@
     "quantEntryDesc": "Datawhale Quant for Beginners — 8 Chinese chapters + a synthetic-data walkthrough. Fully bundled, no setup required.",
     "quantEntryAction": "Start learning",
     "cancelDownload": "Cancel download",
+    "acquireCancelled": "Download cancelled",
     "statsLine": "{{total}} editions · {{bundled}} readable offline · built {{date}}",
     "subjectAll": "All subjects",
     "filterAll": "All",

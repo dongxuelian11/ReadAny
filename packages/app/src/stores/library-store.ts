@@ -1113,6 +1113,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
                 currentCfi: book.currentCfi,
                 isVectorized: false,
                 vectorizeProgress: 0,
+                vectorizeError: undefined,
                 tags: book.tags,
                 fileHash: book.fileHash,
                 syncStatus: "local",
